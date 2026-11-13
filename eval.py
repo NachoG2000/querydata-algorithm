@@ -123,7 +123,7 @@ def append_experiment(path: Path, row: dict) -> None:
         row_id = 1
     row["id"] = row_id
     with path.open("a", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
         if not exists:
             writer.writeheader()
         writer.writerow({key: row.get(key, "") for key in fields})
@@ -148,7 +148,7 @@ def mark_experiment(path: Path, status: str, experiment_id: str | None) -> str:
     if status == "accepted":
         row["commit"] = git_commit()
     with NamedTemporaryFile(mode="w", encoding="utf-8", newline="", dir=path.parent, delete=False) as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t")
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     Path(handle.name).replace(path)
