@@ -18,7 +18,7 @@ import unicodedata
 
 PARAMS = {
     "q_longitud_guion": 0.25,
-    "q_coseno_guion": 0.98,
+    "q_coseno_guion": 0.975,
     "mezcla_ventana": 0.5,
     "factor_soporte": 0.85,
     "factor_rafaga": 2.0,
