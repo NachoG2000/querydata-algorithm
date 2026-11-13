@@ -31,7 +31,7 @@ PARAMS = {
     "percentil_candidata": 0.25,
     "percentil_fusion": 0.5,
     "percentil_nucleo": 0.50,
-    "percentil_asignacion": 0.10,
+    "percentil_asignacion": 0.0,
     "percentil_ventana": 0.25,
     "percentil_aristas": 0.75,
     "min_palabras_guion": 6,
