@@ -190,7 +190,7 @@ def main() -> None:
     if len(day_values) < 2:
         parser.error("Se necesitan comentarios en al menos dos días locales.")
     midpoint = len(day_values) // 2
-    splits = {"dia_1_7": set(day_values[:midpoint]), "dia_8_14": set(day_values[midpoint:])}
+    splits = {"dia_1_7": set(day_values[:midpoint]), "dia_8_14": set(day_values[midpoint:]), "dia_1_10": set(day_values[:10])}
     args.salida.mkdir(parents=True, exist_ok=True)
 
     results: dict[str, dict] = {}

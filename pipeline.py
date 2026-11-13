@@ -817,7 +817,7 @@ def main():
     parser.add_argument("--datos", type=Path, default=Path("datos/practica"))
     parser.add_argument("--entrega", type=Path, default=Path("salida/practica"))
     parser.add_argument("--cache", type=Path, default=Path(".cache"))
-    parser.add_argument("--decisor", choices=("local", "jev"), default="local")
+    parser.add_argument("--decisor", choices=("local", "jev"), default="jev")
     args = parser.parse_args()
     with threadpool_limits(limits=PARAMS["hilos"]):
         ejecutar(args.datos, args.entrega, args.cache, args.decisor)

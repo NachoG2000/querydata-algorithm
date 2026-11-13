@@ -14,8 +14,8 @@ git clone https://github.com/qualydata-org/desafio-qualydata.git .cache/qualydat
 git -C .cache/qualydata-upstream checkout 8cbe921b67c1ef5943183de67ecb181e370322f5
 mkdir -p datos
 cp -R .cache/qualydata-upstream/datos/practica datos/practica
-python pipeline.py --datos datos/practica --entrega salida/practica
-python eval.py
+python pipeline.py --datos datos/practica --entrega salida/practica --decisor local
+python eval.py --decisor local
 python export_vault.py
 ```
 
@@ -33,7 +33,7 @@ python evaluacion/puntuar.py --verdad datos/practica/verdad --entrega salida/bas
 Descarga los cuatro archivos de la [publicación del set final](https://github.com/qualydata-org/desafio-qualydata/releases/tag/set-final) en `datos/final/` y ejecuta el comando que vuelve a correr el jurado.
 
 ```bash
-python pipeline.py --datos datos/final --entrega entrega
+python pipeline.py --datos datos/final --entrega entrega --decisor jev
 ```
 
 `entrega/` contiene `comentarios.csv`, `narrativas.csv`, `cuentas.csv` y `costo.json`. El pipeline escribe los Parquet auxiliares y `metricas.json` en `salida/final/` para este comando. El cierre oficial es el viernes 13 de noviembre a las 13 h de Salta. Antes del cierre, sube el código y `entrega/` al repo público y registra el enlace y el video de demo en Hacki.
@@ -104,7 +104,15 @@ En modo local, los ocho archivos de salida son idénticos byte a byte entre corr
 
 Cada ejecución imprime una línea JSON `telemetria: ...` con sus tiempos reales por etapa. `eval.py` usa esos tiempos actuales para la métrica combinada y `experiments.tsv`, aunque los archivos conserven la referencia. En modo Jev, los JSON reportan el gasto y la latencia de las llamadas nuevas; la reproducibilidad byte a byte se verifica en modo local. Para comprobar las regresiones del reporte y la penalización temporal, ejecuta `python -m unittest discover -s tests -v`.
 
-Para probar Jev, exporta `TYPESAFE_API_KEY` en tu shell y agrega `--decisor jev`. El pipeline enruta una fracción acotada de raíces con margen bajo y guarda las decisiones exitosas en SQLite. Las respuestas servidas desde caché cuentan para la cobertura de IA. Los tokens y dólares corresponden a llamadas nuevas. Sin clave o ante fallos de solicitud, el decisor local entrega la respuesta. [TypeSafe Choice](https://docs.typesafe.ai/primitives/choice.md).
+`pipeline.py` selecciona Jev por defecto y `--decisor local` permite ejecutar sin API. `eval.py` conserva su modo local por defecto para la comparación controlada. Para configurar la clave, copia `.env.example` a `.env` y completa `TYPESAFE_API_KEY` en ese archivo. `.env` está excluido de Git y el modo Jev lo carga automáticamente desde la raíz del proyecto. Las variables ya definidas en el entorno tienen prioridad. No hace falta ejecutar `source`:
+
+```bash
+python pipeline.py --datos datos/final --entrega entrega --decisor jev
+# Para evaluar el set de práctica:
+python eval.py --decisor jev
+```
+
+El pipeline enruta una fracción acotada de raíces con margen bajo (hasta el 1% de los comentarios) y guarda las decisiones exitosas en SQLite. Las respuestas servidas desde caché cuentan para la cobertura de IA. Los tokens y dólares corresponden a llamadas nuevas. Sin clave o ante fallos de solicitud, el decisor local entrega la respuesta. [TypeSafe Choice](https://docs.typesafe.ai/primitives/choice.md).
 
 ## Resultados y costo
 

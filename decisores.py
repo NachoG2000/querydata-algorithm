@@ -23,6 +23,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from dotenv import load_dotenv
+
 
 DEFAULT_DB = Path(".cache/decisores.sqlite3")
 DEFAULT_API_URL = "https://api.typesafe.ai/v1/systemone"
@@ -104,6 +106,8 @@ class DecisionEngine:
     ) -> None:
         if mode not in {"local", "jev"}:
             raise ValueError("mode debe ser 'local' o 'jev'")
+        if mode == "jev":
+            load_dotenv(Path(__file__).resolve().with_name(".env"), override=False, interpolate=False)
         self.api_key = api_key or os.getenv("TYPESAFE_API_KEY", "")
         self.mode = "jev" if mode == "jev" and self.api_key else "local"
         if mode == "jev" and not self.api_key:
