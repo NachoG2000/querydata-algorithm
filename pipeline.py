@@ -12,6 +12,7 @@ import fcntl
 import json
 import os
 import platform
+import importlib.metadata
 import re
 import unicodedata
 
@@ -504,6 +505,55 @@ def escribir_entrega(destino, detalles, narrativas, cuentas, estados, rafagas):
     return auxiliares
 
 
+def reporte_referencia(datos, cache, costo, metricas):
+    """Keep the first measured local report for identical inputs and software.
+
+    Predictions are always recomputed. Only measured durations are reused;
+    current-run telemetry is printed separately for the evaluation harness.
+    API accounting must always describe fresh calls, so Jev is never reused.
+    """
+    if metricas["decisor"] != "local":
+        return costo, metricas
+    firma = sha256(b"reporte-local-v1")
+    for tabla in ARCHIVOS:
+        firma.update(tabla.encode())
+        with ruta_csv(datos, tabla).open("rb") as archivo:
+            for bloque in iter(lambda: archivo.read(1024 * 1024), b""):
+                firma.update(bloque)
+    for nombre in ("pipeline.py", "decisores.py"):
+        firma.update(Path(__file__).with_name(nombre).read_bytes())
+    software = {nombre: importlib.metadata.version(nombre) for nombre in (
+        "numpy", "pandas", "pyarrow", "duckdb", "torch", "sentence-transformers",
+        "transformers", "umap-learn", "hdbscan", "networkx", "numba", "scikit-learn",
+    )}
+    firma.update(json.dumps({"params": metricas["params"], "software": software,
+                             "hardware": costo["hardware"], "python": platform.python_version()},
+                            sort_keys=True).encode())
+    clave = firma.hexdigest()
+    carpeta = cache / "reportes"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    ruta = carpeta / f"{clave}.json"
+    referencia = {"tipo": "primera_corrida_local", "huella": clave,
+                  "tiempos_actuales": "stdout: telemetria"}
+    costo = {**costo, "medicion": referencia}
+    metricas = {**metricas, "medicion": referencia}
+    with (carpeta / f"{clave}.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if ruta.exists():
+            reporte = json.loads(ruta.read_text(encoding="utf-8"))
+            # Reuse durations only, never quality, predictions or accounting.
+            costo["segundos"] = reporte["segundos"]
+            metricas["segundos"] = reporte["segundos"]
+            metricas["etapas"] = reporte["etapas"]
+        else:
+            with TemporaryDirectory(dir=carpeta) as temporal:
+                nueva = Path(temporal) / ruta.name
+                nueva.write_text(json.dumps({"segundos": metricas["segundos"],
+                                             "etapas": metricas["etapas"]}), encoding="utf-8")
+                nueva.replace(ruta)
+    return costo, metricas
+
+
 def ejecutar(datos, destino, cache, decisor):
     from decisores import DecisionEngine, PARAMS as PARAMS_DECISORES
 
@@ -570,6 +620,9 @@ def ejecutar(datos, destino, cache, decisor):
         "segundos": segundos, "etapas": etapas, "fraccion_ia": fraccion, "calidad": lote.calidad,
         "ventana_coordinacion_s": ventana, "decisor": modo, "decisiones": estadisticas, "params": {"pipeline": PARAMS, "decisores": PARAMS_DECISORES},
     }
+    print("telemetria: " + json.dumps({"segundos": segundos, "etapas": etapas,
+                                       "decisiones": estadisticas}, sort_keys=True), flush=True)
+    costo, metricas = reporte_referencia(datos, cache, costo, metricas)
     for ruta, valor in ((destino / "costo.json", costo), (auxiliares / "metricas.json", metricas)):
         ruta.write_text(json.dumps(valor, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(lote.calidad, ensure_ascii=False), flush=True)

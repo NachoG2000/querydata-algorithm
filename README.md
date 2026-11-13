@@ -98,7 +98,11 @@ La corrida de entrega trabaja en memoria. Para millones de comentarios por día,
 
 ### Modo local y modo con API
 
-El modo local usa MiniLM y reglas de postura en español. Para experimentar con NLI local, fija `nli_model` y `nli_revision` en `decisores.py`. Esa ruta es opcional y no se usó en las mediciones de referencia. Los tiempos se miden por corrida. Las predicciones y los Parquet usan semillas, orden e identificadores estables. Los campos que miden tiempo en `costo.json` y `metricas.json` cambian en cada ejecución.
+El modo local usa MiniLM y reglas de postura en español. Para experimentar con NLI local, fija `nli_model` y `nli_revision` en `decisores.py`. Esa ruta es opcional y no se usó en las mediciones de referencia. Las predicciones y los Parquet usan semillas, orden e identificadores estables.
+
+En modo local, los ocho archivos de salida son idénticos byte a byte entre corridas con la misma entrada, software y caché. `costo.json` y `metricas.json` conservan los tiempos reales de la primera corrida como referencia, identificada por `medicion.huella`. `.cache/reportes/` guarda únicamente esas duraciones; las predicciones, la calidad y los costos se calculan de nuevo. La huella incluye los cuatro archivos de entrada, el código de pipeline y decisores, parámetros, versiones y plataforma. Cambiar cualquiera de ellos crea otra referencia. Borrar esa caché vuelve a medirla.
+
+Cada ejecución imprime una línea JSON `telemetria: ...` con sus tiempos reales por etapa. `eval.py` usa esos tiempos actuales para la métrica combinada y `experiments.tsv`, aunque los archivos conserven la referencia. En modo Jev, los JSON reportan el gasto y la latencia de las llamadas nuevas; la reproducibilidad byte a byte se verifica en modo local. Para comprobar las regresiones del reporte y la penalización temporal, ejecuta `python -m unittest discover -s tests -v`.
 
 Para probar Jev, exporta `TYPESAFE_API_KEY` en tu shell y agrega `--decisor jev`. El pipeline enruta una fracción acotada de raíces con margen bajo y guarda las decisiones exitosas en SQLite. Las respuestas servidas desde caché cuentan para la cobertura de IA. Los tokens y dólares corresponden a llamadas nuevas. Sin clave o ante fallos de solicitud, el decisor local entrega la respuesta. [TypeSafe Choice](https://docs.typesafe.ai/primitives/choice.md).
 

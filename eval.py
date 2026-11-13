@@ -90,6 +90,11 @@ def invoke_pipeline(data: Path, output: Path, decisor: str, timeout: float) -> d
         raise RuntimeError(f"pipeline failed for {data}:\n{result.stdout}\n{result.stderr}")
     metrics_path = output / "metricas.json"
     metrics = json.loads(metrics_path.read_text(encoding="utf-8")) if metrics_path.exists() else {}
+    # Artifact durations describe a stable reference run. Penalize this run's
+    # actual measured time, including cold embedding/model work when present.
+    for line in result.stdout.splitlines():
+        if line.startswith("telemetria: "):
+            metrics.update(json.loads(line.removeprefix("telemetria: ")))
     metrics.setdefault("segundos", elapsed)
     metrics["runner_segundos"] = elapsed
     return metrics

@@ -34,7 +34,7 @@ Una afirmación puede reaparecer con otra redacción o nacer en la mitad del per
 - La referencia oficial dice alrededor de 17/55. La línea base oficial intacta dio 22,15/55 en dos resultados locales de práctica. Los dos scripts coinciden con el primer commit oficial del desafío y los cambios posteriores afectaron el README. La cifra reproducida es la referencia de este repo.
 - La consigna permite entrenar con la verdad de práctica. Este proyecto usa la restricción más estricta del brief y la reserva para evaluación.
 - La entrega oficial tiene cuatro archivos. Los Parquet y la telemetría quedan en `salida/final/` al generar `entrega/`.
-- El tiempo real requerido en `costo.json` y los tiempos por etapa de `metricas.json` impiden identidad byte a byte en esos campos. La comprobación de determinismo compara todas las predicciones y Parquet, y el contenido de ambos JSON sin sus medidas de tiempo en modo local.
+- Para conciliar los tiempos medidos y los archivos idénticos, el modo local conserva en ambos JSON una medición de referencia real por entrada, código, parámetros y entorno, identificada por `medicion.huella`. Las duraciones se guardan en `.cache/reportes/`; cada ejecución vuelve a calcular todas las predicciones y emite los tiempos actuales en `stdout` (`telemetria`). El evaluador usa estos últimos para la penalización temporal. La comparación byte a byte incluye ambos JSON completos y requiere conservar la caché de referencia. Jev mantiene la contabilidad real de cada corrida, sin reutilizar tiempos.
 
 ## Puntos de partida del código
 
