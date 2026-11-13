@@ -94,3 +94,29 @@ Tiempo total del arnés: **193.497 s**. La tabla muestra puntos oficiales; las c
 Los mayores tiempos del completo fueron `agrupar` (41.125 s), `coordinacion` (18.367 s). Los tiempos usan caché local de embeddings preparada; no representan el costo de descargar modelos ni de codificar por primera vez textos de una entrada nueva. El modo local registró cero tokens y cero dólares de API.
 
 Las narrativas se compararon por A y la coordinación por B; ninguna partición se eximió por baja actividad. El soporte usa población y volumen observados; las ventanas se estiman de las demoras y la cadencia de la entrada, sin asumir 14 días. La expansión de operaciones exige publicaciones independientes y vecinos relativos al tamaño de la operación.
+
+## Mejora posterior a la entrega protegida: cuatro ventanas
+
+El código aceptado es `de7ebd0` y la verificación oficial sin claves corresponde a la fila 148. La referencia protegida es `c7406f3`, cuyo pipeline generó la entrega `8a1f5be`. La fila de verificación se registra como `discarded` porque no presenta una hipótesis nueva: comprueba la configuración aceptada.
+
+| Ventana | A referencia | A actual | B referencia | B actual | Total actual | Tiempo actual |
+|---|---:|---:|---:|---:|---:|---:|
+| completo | 13.37 | 14.02 | 19.79 | 19.79 | 33.81/55 | 78.315 s |
+| dia_1_7 | 11.58 | 12.35 | 5.63 | 5.63 | 17.98/55 | 58.561 s |
+| dia_8_14 | 17.25 | 17.91 | 12.14 | 12.14 | 30.05/55 | 58.967 s |
+| dia_1_10 | 12.91 | 13.63 | 9.64 | 9.64 | 23.27/55 | 64.858 s |
+
+| Componente oficial (0–1) | Completo | Días 1–7 | Días 8–14 | Días 1–10 |
+|---|---:|---:|---:|---:|
+| Agrupamiento B-cubed | 0.415457 | 0.396637 | 0.444359 | 0.389803 |
+| Postura macro-F1 | 0.510071 | 0.512796 | 0.535265 | 0.523284 |
+| Ruido F1 | 0.717631 | 0.738487 | 0.784044 | 0.698038 |
+| Origen | 0.333333 | 0.000000 | 1.000000 | 0.333333 |
+| Cuentas F1 | 0.788177 | 0.285714 | 0.560510 | 0.476821 |
+| Operaciones B-cubed | 0.799457 | 0.084034 | 0.311350 | 0.172185 |
+
+Ganancia contra la línea base oficial de 21,96: **11.85** puntos. Contra la entrega protegida de 33.16: **0.65** puntos. Se aceptaron en esta etapa las filas: 140, 143, 145. El arnés final de cuatro ventanas tardó 282.713 s de pared. Los tiempos de esta tabla usan modelos e inferencias preparados; la entrega final se conserva exactamente como en `8a1f5be`, según su procedencia documentada en `FINAL_RUN.md`. El usuario pidió cerrar sin esperar otra corrida fría; las nuevas mejoras de código todavía no están aplicadas a esos cuatro archivos.
+
+Los cuatro conjuntos comparten datos y no constituyen un test independiente. La verdad del set final no está publicada: su cantidad de narrativas o cuentas marcadas describe la salida, no su puntaje. El diagnóstico y las hipótesis descartadas permanecen en `NOTES.md` y `experiments.tsv`.
+
+Cierre pedido por el usuario: los ocho archivos de práctica resultaron idénticos byte a byte entre la verificación y la repetición con `PYTHONHASHSEED=2`, sin claves y usando el selector por defecto con reemplazo local. La repetición tardó 76,450 s y realizó cero llamadas API. Pasaron las cuatro pruebas. Los cuatro hashes de entrega final siguen coincidiendo con 8a1f5be; no se regeneró el final con NLI por la instrucción de cerrar sin esa demora.

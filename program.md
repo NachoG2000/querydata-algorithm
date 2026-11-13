@@ -1,4 +1,4 @@
-# Experimentos nocturnos
+# Experimentos y criterio de aceptación
 
 ## Restricciones de ingeniería
 
@@ -56,3 +56,7 @@ Esta regla reemplaza la aceptación histórica por métrica combinada y margen 0
 4. **Ruido.** Calibrar exclusión de comentarios sin afirmación, preservando respuestas con relación válida al padre y sin convertirlas automáticamente en ruido por longitud.
 5. **Recall de coordinación en períodos cortos.** Umbrales normalizados por exposición y oportunidades, medidos también en días 1–10, manteniendo precisión oficial ≥0,9. La primera mitad sigue bloqueando; no se exime por su mal resultado.
 6. **Fragmentación de operaciones.** Consolidar sólo con evidencia independiente repetida, sin fijar el número de campañas ni introducir IDs o contenido de la verdad.
+
+## Cierre solicitado por el usuario
+
+El 13/11/2026 el usuario pidió terminar la iteración en curso, pushear todo a main y parar. La iteración 147 se descartó; la mejor aceptada es la 145. Luego indicó que no había tiempo para esperar más. Se detuvo el loop y se conserva sin cambios la entrega final generada por c7406f3 y publicada en 8a1f5be. La regeneración fría prevista queda pendiente: las mejoras de postura del código nuevo aún no se aplicaron a esos cuatro archivos. Se suben código validado, diagnóstico, protocolo y registro completo de experimentos. No se inicia ninguna otra hipótesis.

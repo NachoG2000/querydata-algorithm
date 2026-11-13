@@ -1,5 +1,7 @@
 # Entrega del set final
 
+Actualización al cierre: se conserva esta entrega exactamente como fue generada por `c7406f3` y publicada en `8a1f5be`. El código posterior mejora práctica a **33,81/55**, pero el usuario pidió cerrar de inmediato sin esperar la regeneración fría. Esas mejoras todavía no se aplicaron a los cuatro archivos de `entrega/`; los hashes y tiempos de esta nota siguen describiendo la entrega conservada.
+
 Generada automáticamente con el código de `c7406f32b1fbfe17b9ab0c6979a505ac05be8160`, sin editar predicciones ni etiquetas a mano. Finalización: 2026-11-13T08:40:28.277512-03:00.
 
 Fuente: [release oficial set-final](https://github.com/qualydata-org/desafio-qualydata/releases/tag/set-final), publicada el 12/11/2026 a las 17:00 de Salta. Se verificaron los cuatro SHA-256 publicados. El set no contiene verdad pública; no hay puntaje de final calculable localmente.

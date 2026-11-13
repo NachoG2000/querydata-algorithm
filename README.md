@@ -19,7 +19,7 @@ python eval.py --decisor local
 python export_vault.py
 ```
 
-La primera corrida descarga MiniLM desde Hugging Face sin clave y calcula los embeddings en CPU. Con el modelo en caché puedes correr con `HF_HUB_OFFLINE=1`. `eval.py` ejecuta de nuevo el pipeline para el set completo y para cada mitad cronológica. [Sentence Transformers](https://sbert.net/docs/package_reference/sentence_transformer/model.html).
+La primera corrida descarga los modelos fijados desde Hugging Face sin clave y calcula embeddings e inferencias NLI en CPU. Con el modelo en caché puedes correr con `HF_HUB_OFFLINE=1`. `eval.py` ejecuta de nuevo el pipeline para el set completo y para cada mitad cronológica y los primeros diez días locales. [Sentence Transformers](https://sbert.net/docs/package_reference/sentence_transformer/model.html).
 
 Para reproducir la línea base oficial con un hilo y puntuarla, ejecuta estos comandos.
 
@@ -98,9 +98,9 @@ La corrida de entrega trabaja en memoria. Para millones de comentarios por día,
 
 ### Modo local y modo con API
 
-El modo local usa MiniLM y reglas de postura en español. Para experimentar con NLI local, fija `nli_model` y `nli_revision` en `decisores.py`. Esa ruta es opcional y no se usó en las mediciones de referencia. Las predicciones y los Parquet usan semillas, orden e identificadores estables.
+El modo local combina embeddings MiniLM/E5 con NLI multilingüe para postura en raíces y relaciones padre–hijo. El modelo [multilingual-MiniLMv2-L6-mnli-xnli](https://huggingface.co/MoritzLaurer/multilingual-MiniLMv2-L6-mnli-xnli) y su revisión están fijados en `pipeline.py`; `nli_local.py` cachea logits por modelo, revisión, longitud y textos. La primera entrada nueva requiere inferencia; las siguientes reutilizan la caché. No necesita claves. Las predicciones y los Parquet usan semillas, orden e identificadores estables.
 
-En modo local, los ocho archivos de salida son idénticos byte a byte entre corridas con la misma entrada, software y caché. `costo.json` y `metricas.json` conservan los tiempos reales de la primera corrida como referencia, identificada por `medicion.huella`. `.cache/reportes/` guarda únicamente esas duraciones; las predicciones, la calidad y los costos se calculan de nuevo. La huella incluye los cuatro archivos de entrada, el código de pipeline y decisores, parámetros, versiones y plataforma. Cambiar cualquiera de ellos crea otra referencia. Borrar esa caché vuelve a medirla.
+En modo local, los ocho archivos de salida son idénticos byte a byte entre corridas con la misma entrada, software y caché. `costo.json` y `metricas.json` conservan los tiempos reales de la primera corrida como referencia, identificada por `medicion.huella`. `.cache/reportes/` guarda únicamente esas duraciones; las predicciones, la calidad y los costos se calculan de nuevo. La huella incluye los cuatro archivos de entrada, el código de pipeline, decisores y NLI, parámetros, versiones y plataforma. Cambiar cualquiera de ellos crea otra referencia. Borrar esa caché vuelve a medirla.
 
 Cada ejecución imprime una línea JSON `telemetria: ...` con sus tiempos reales por etapa. `eval.py` usa esos tiempos actuales para la métrica combinada y `experiments.tsv`, aunque los archivos conserven la referencia. En modo Jev, los JSON reportan el gasto y la latencia de las llamadas nuevas; la reproducibilidad byte a byte se verifica en modo local. Para comprobar las regresiones del reporte y la penalización temporal, ejecuta `python -m unittest discover -s tests -v`.
 
