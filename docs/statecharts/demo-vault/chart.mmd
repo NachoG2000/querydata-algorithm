@@ -1,0 +1,49 @@
+---
+title: "Demo: recorrer el vault de Obsidian"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: indice
+    lg1: narrativa
+    lg2: otras
+    lg3: Breaks OperacionListadaImplicaAmplificada
+    lg4: Path to the OperacionListadaImplicaAmplificada bug
+  }
+  class lg0 teal
+  class lg1 purple
+  class lg2 tan
+  class lg3 breaks
+  class lg4 bugPath
+  s0: Índice
+  s1: Narrativa sin operación
+  s2: Operación coordinada
+  s3: Narrativa con operación, 0 días amplificada
+  s4: Narrativa amplificada, con su operación
+  s5: Fuente (medio)
+  [*] --> s0
+  s0 --> s1: abre una narrativa de la tabla
+  s0 --> s2: abre una operación de la tabla
+  s0 --> s3: abre una narrativa [sin salida/final]
+  s0 --> s4: abre una narrativa de la tabla
+  s1 --> s0: vuelve con Atrás (no hay enlace al índice)
+  s1 --> s5: abre una fuente relacionada
+  s2 --> s3: abre una narrativa que empuja
+  s2 --> s5: abre una fuente relacionada
+  s3 --> s0: vuelve con Atrás (no hay enlace al índice)
+  s3 --> s5: abre una fuente relacionada
+  s3 --> s2: abre la operación relacionada
+  s2 --> s4: abre una narrativa que empuja
+  s4 --> s0: vuelve con Atrás (no hay enlace al índice)
+  s4 --> s5: abre una fuente relacionada
+  s4 --> s2: abre la operación relacionada
+  s5 --> s2: abre una operación del medio
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  class s0 teal
+  class s0 bugPath
+  class s1 purple
+  class s2 tan
+  class s3 purple
+  class s3 breaks
+  class s3 bugPath
+  class s4 purple
+  class s5 tan

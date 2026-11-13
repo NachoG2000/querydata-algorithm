@@ -1,0 +1,41 @@
+---
+title: "Entrega final: de la rama a main"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: trabajo
+    lg1: main
+    lg2: Breaks MainTieneEntregaDeSuCodigo
+    lg3: Path to the MainTieneEntregaDeSuCodigo bug
+  }
+  class lg0 blue
+  class lg1 teal
+  class lg2 breaks
+  class lg3 bugPath
+  s0: Candidato en la rama de mejoras
+  s1: Main y entrega intactos
+  s2: Candidato supera la referencia
+  s3: Merge local, entrega vieja
+  s4: Main publicado con entrega de otro código
+  s5: Entrega regenerada en frío
+  s6: Main publicado con su entrega
+  [*] --> s0
+  s0 --> s1: no supera a c7406f3
+  s0 --> s2: pasa completo y las tres particiones
+  s2 --> s3: merge a main
+  s3 --> s4: push sin regenerar [cierre apurado]
+  s3 --> s5: corre el set final sin caché de embeddings
+  s5 --> s6: commit y push de código y entrega/
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  class s0 blue
+  class s0 bugPath
+  class s1 teal
+  class s2 blue
+  class s2 bugPath
+  class s3 blue
+  class s3 bugPath
+  class s4 teal
+  class s4 breaks
+  class s4 bugPath
+  class s5 blue
+  class s6 teal

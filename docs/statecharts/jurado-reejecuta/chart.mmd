@@ -1,0 +1,69 @@
+---
+title: "El jurado re-ejecuta el pipeline"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: corrida
+    lg1: resultado
+    lg2: Breaks CostoIgualAEntrega or PrediccionesIgualesAEntrega or SinClaveSinRed
+    lg3: Breaks SinClaveSinRed in some cases
+    lg4: Path to the CostoIgualAEntrega or PrediccionesIgualesAEntrega or SinClaveSinRed bug
+  }
+  class lg0 blue
+  class lg1 orange
+  class lg2 breaks
+  class lg3 mayBreak
+  class lg4 bugPath
+  s0: Repo clonado (commit de la entrega, sin clave)
+  s1: Repo clonado (commit de la entrega, con clave)
+  s2: Repo clonado (main, sin clave)
+  s3: Repo clonado (main, con clave)
+  s4: Modelos bajados (commit de la entrega, sin clave)
+  s5: Modelos bajados (commit de la entrega, con clave)
+  s6: Modelos bajados (main, sin clave)
+  s7: Modelos bajados (main, con clave)
+  s8: Posturas decididas en local (commit de la entrega)
+  s9: Posturas decididas en local (main)
+  s10: Posturas decididas por Jev
+  s11: Predicciones distintas a entrega/
+  s12: Predicciones iguales, costo distinto
+  [*] --> s0
+  [*] --> s1
+  [*] --> s2
+  [*] --> s3
+  s0 --> s4: baja los modelos de Hugging Face
+  s1 --> s5: baja los modelos de Hugging Face
+  s2 --> s6: baja los modelos de Hugging Face
+  s3 --> s7: baja los modelos de Hugging Face
+  s4 --> s8: decide postura con NLI local
+  s5 --> s8: decide postura con NLI local
+  s6 --> s9: decide postura con NLI local
+  s7 --> s10: manda raíces dudosas a Jev
+  s8 --> s12: escribe entrega/ y compara con la del repo
+  s9 --> s11: escribe entrega/ y compara con la del repo
+  s10 --> s11: escribe entrega/ y compara con la del repo
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  classDef mayBreak fill:#fff3e6,stroke:#e8730c,stroke-width:2.5px,color:#b85a06
+  class s0 blue
+  class s1 blue
+  class s2 blue
+  class s2 bugPath
+  class s3 blue
+  class s4 blue
+  class s4 breaks
+  class s5 blue
+  class s6 blue
+  class s6 breaks
+  class s6 bugPath
+  class s7 blue
+  class s8 blue
+  class s8 mayBreak
+  class s9 blue
+  class s9 breaks
+  class s9 bugPath
+  class s10 blue
+  class s11 orange
+  class s11 breaks
+  class s11 bugPath
+  class s12 orange
+  class s12 breaks

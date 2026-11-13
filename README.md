@@ -40,6 +40,14 @@ python pipeline.py --datos datos/final --entrega entrega --decisor jev
 
 ## Arquitectura
 
+Documentación de diseño y verificación:
+
+- [`docs/contexto.md`](docs/contexto.md) cuenta el problema, las máquinas de estado con sus invariantes y las decisiones tomadas.
+- [`docs/statecharts/`](docs/statecharts/README.md) dibuja cuatro flujos chequeados con TLC: el jurado re-ejecuta el pipeline, el equipo produce la entrega final, un experimento del loop y la navegación del vault de demo.
+- [`.claude/skills/`](.claude/skills/) tiene una skill de verificación formal por subsistema: [narrativa](.claude/skills/verificar-narrativa/SKILL.md), [comentario](.claude/skills/verificar-comentario/SKILL.md), [coordinación](.claude/skills/verificar-coordinacion/SKILL.md), [loop de experimentación](.claude/skills/verificar-loop/SKILL.md) y [entrega final](.claude/skills/verificar-entrega/SKILL.md).
+- [`docs/violaciones.md`](docs/violaciones.md) lista las invariantes que el código actual no cumple.
+- [`CLAUDE.md`](CLAUDE.md) y [`AGENTS.md`](AGENTS.md) resumen reglas, mapa del repo y estado para cualquier agente.
+
 ```mermaid
 flowchart LR
     CSV["CSV y CSV.gz"] --> PQ["DuckDB → Parquet tipado"]
