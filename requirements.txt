@@ -1,0 +1,15 @@
+duckdb==1.4.1
+hdbscan==0.8.40
+httpx==0.28.1
+networkx==3.4.2
+numba==0.61.2
+numpy==2.2.6
+pandas==2.3.3
+pyarrow==21.0.0
+pynndescent==0.5.13
+scikit-learn==1.6.1
+scipy==1.14.1
+sentence-transformers==5.1.2
+torch==2.8.0
+transformers==4.57.1
+umap-learn==0.5.7
