@@ -35,6 +35,9 @@ PARAMS = {
     "revision_coordinacion_aux": 'a3ded7f4d0d725c6fc251504622d65b2516a3aa1',
     "modo_coordinacion": 'union',
     "q_coseno_aux": 0.97,
+    "q_coseno_expansion": 0.99,
+    "factor_ventana_expansion": 0.25,
+    "factor_vecinos_expansion": 2,
     "seed": 42,
     "modelo": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "revision": "a3ded7f4d0d725c6fc251504622d65b2516a3aa1",
@@ -416,6 +419,51 @@ def unir_detecciones(resultados):
     return grupos,rafagas,max(r[2] for r in resultados)
 
 
+def ampliar_semillas(comentarios, normalizados, vectores, indices, grupos, rafagas, ventana):
+    if not grupos or len(vectores)<2:return grupos,rafagas
+    eventos=comentarios[comentarios.fecha.notna() & comentarios.cuenta_id.ne("") & comentarios.publicacion_id.ne("")]
+    longitudes=normalizados.loc[eventos.index].str.split().str.len()
+    eventos=eventos[longitudes.ge(longitudes.quantile(PARAMS["q_longitud_parafrasis"]))]
+    if len(eventos)<2:return grupos,rafagas
+    datos=eventos.sort_values(["publicacion_id","fecha","comentario_id"],kind="stable")
+    posiciones=datos.index.to_numpy();pubs=datos.publicacion_id.to_numpy();cuentas=datos.cuenta_id.to_numpy()
+    tiempos=datos.fecha.dt.as_unit("ns").astype("int64").to_numpy()/1e9
+    conocidas=datos.cuenta_id.isin(grupos).to_numpy()
+    volumen=eventos.groupby("publicacion_id").size()
+    rng=np.random.default_rng(PARAMS["seed"]);n=min(len(vectores),PARAMS.get("muestra_coordinacion",PARAMS["muestra"]))
+    a=rng.integers(0,len(vectores),n);b=(a+rng.integers(1,len(vectores),n))%len(vectores)
+    fondo=np.einsum("ij,ij->i",vectores[a],vectores[b])
+    q=1-(1-PARAMS["q_coseno_expansion"])/max(1.0,float(np.sqrt(volumen.median())))
+    piso=float(np.quantile(fondo,q))
+    evidencia=defaultdict(set);vecinos=defaultdict(set)
+    cantidad=max(1,int(np.ceil(PARAMS["factor_vecindad_sem"]*np.log1p(len(datos)))))
+    for salto in range(1,min(len(datos),cantidad+1)):
+        candidatos=np.flatnonzero((pubs[:-salto]==pubs[salto:]) & (tiempos[salto:]-tiempos[:-salto]<=ventana*PARAMS["factor_ventana_expansion"]) & (conocidas[:-salto]!=conocidas[salto:]))
+        for inicio in range(0,len(candidatos),4096):
+            izq=candidatos[inicio:inicio+4096];der=izq+salto
+            cosenos=np.einsum("ij,ij->i",vectores[indices[posiciones[izq]]],vectores[indices[posiciones[der]]])
+            for i,j in zip(izq[cosenos>=piso],der[cosenos>=piso]):
+                semilla,candidata=(i,j) if conocidas[i] else (j,i)
+                clave=(cuentas[candidata],grupos[cuentas[semilla]])
+                evidencia[clave].add(pubs[i]);vecinos[clave].add(cuentas[semilla])
+    tamanos=Counter(grupos.values());propuestas=defaultdict(list)
+    for (cuenta,grupo),publicaciones in sorted(evidencia.items()):
+        soporte=max(1,int(np.ceil(np.log1p(tamanos[grupo])/PARAMS["factor_vecinos_expansion"])))
+        if len(publicaciones)>=2 and len(vecinos[(cuenta,grupo)])>=soporte:
+            propuestas[cuenta].append((len(publicaciones),len(vecinos[(cuenta,grupo)]),grupo))
+    nuevos=dict(grupos)
+    for cuenta,candidatos in sorted(propuestas.items()):
+        candidatos=sorted(candidatos,reverse=True)
+        if len(candidatos)==1 or candidatos[0][:2]>candidatos[1][:2]:nuevos[cuenta]=candidatos[0][2]
+    seleccion=eventos[eventos.cuenta_id.isin(nuevos)].assign(grupo=lambda x:x.cuenta_id.map(nuevos))
+    seleccion=seleccion.assign(bloque=(seleccion.fecha.dt.as_unit("ns").astype("int64")/1e9//max(ventana,1)).astype("int64"))
+    filas=[]
+    for (grupo,pub,_),bloque in seleccion.groupby(["grupo","publicacion_id","bloque"],sort=True):
+        n=bloque.cuenta_id.nunique()
+        if n>=2:filas.append((grupo,pub,bloque.fecha.min(),bloque.fecha.max(),n))
+    return nuevos,pd.DataFrame(filas,columns=RAFAGAS)
+
+
 def validar_candidatas(comentarios, candidatas, grupos, motor):
     from decisores import DecisionInput
 
@@ -694,6 +742,7 @@ def ejecutar(datos, destino, cache, decisor):
         grupos, rafagas, ventana = unir_detecciones([deteccion_base, nueva])
     else:
         grupos, rafagas, ventana = nueva
+    grupos, rafagas = ampliar_semillas(comentarios, normalizados, vectores_aux, indices_aux, grupos, rafagas, ventana)
     medir("coordinacion")
     with DecisionEngine(mode=decisor, cache_path=cache / "decisores.sqlite3") as motor:
         validas = validar_candidatas(comentarios.assign(centralidad=candidatas.similitud[indices]),
