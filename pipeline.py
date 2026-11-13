@@ -29,11 +29,11 @@ PARAMS = {
     "q_longitud_parafrasis": 0.2,
     "factor_soporte_parafrasis": 1.0,
     "fondo_guiones_largos": False,
-    "modelo_coordinacion_base": 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
-    "revision_coordinacion_base": 'a3ded7f4d0d725c6fc251504622d65b2516a3aa1',
-    "modelo_coordinacion_aux": 'intfloat/multilingual-e5-small',
-    "revision_coordinacion_aux": '614241f622f53c4eeff9890bdc4f31cfecc418b3',
-    "modo_coordinacion": 'reemplazo',
+    "modelo_coordinacion_base": 'intfloat/multilingual-e5-small',
+    "revision_coordinacion_base": '614241f622f53c4eeff9890bdc4f31cfecc418b3',
+    "modelo_coordinacion_aux": 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
+    "revision_coordinacion_aux": 'a3ded7f4d0d725c6fc251504622d65b2516a3aa1',
+    "modo_coordinacion": 'union',
     "q_coseno_aux": 0.975,
     "seed": 42,
     "modelo": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
@@ -690,8 +690,8 @@ def ejecutar(datos, destino, cache, decisor):
             vectores_base, indices_base = vectores, indices
         else:
             vectores_base, indices_base = embeddings(comentarios, cache, PARAMS["modelo_coordinacion_base"], PARAMS["revision_coordinacion_base"])
-        anterior = coordinacion(comentarios, normalizados, vectores_base, indices_base)
-        grupos, rafagas, ventana = unir_detecciones([anterior, nueva])
+        deteccion_base = coordinacion(comentarios, normalizados, vectores_base, indices_base)
+        grupos, rafagas, ventana = unir_detecciones([deteccion_base, nueva])
     else:
         grupos, rafagas, ventana = nueva
     medir("coordinacion")
