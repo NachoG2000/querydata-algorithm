@@ -18,7 +18,7 @@ import unicodedata
 
 PARAMS = {
     "q_longitud_guion": 0.25,
-    "q_coseno_guion": 0.99,
+    "q_coseno_guion": 0.98,
     "mezcla_ventana": 0.5,
     "factor_soporte": 0.85,
     "factor_rafaga": 2.0,
@@ -26,6 +26,9 @@ PARAMS = {
     "q_demora_guion": 0.5,
     "factor_vecindad_sem": 1.0,
     "q_peso_semantico": 0.5,
+    "q_longitud_parafrasis": 0.2,
+    "factor_soporte_parafrasis": 1.0,
+    "fondo_guiones_largos": False,
     "seed": 42,
     "modelo": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "revision": "a3ded7f4d0d725c6fc251504622d65b2516a3aa1",
@@ -281,7 +284,7 @@ def texto_guion(texto):
 
 def coordinacion(comentarios, normalizados, vectores, indices):
     from sklearn.mixture import GaussianMixture
-    from ejemplos.linea_base import normalize, coordinated_groups
+    from ejemplos.linea_base import normalize
 
     eventos = comentarios[["comentario_id", "publicacion_id", "cuenta_id", "fecha"]].assign(norm=comentarios.texto.map(normalize))
     eventos = eventos[eventos.fecha.notna() & eventos.cuenta_id.ne("") & eventos.publicacion_id.ne("")]
@@ -308,7 +311,20 @@ def coordinacion(comentarios, normalizados, vectores, indices):
     soporte = max(2, int(np.ceil(PARAMS["factor_soporte"] * np.sqrt(np.log1p(poblacion)))))
     participantes = max(2, int(np.ceil(np.log1p(volumen.mean()) / PARAMS["factor_rafaga"])))
     base = eventos.assign(ts=eventos.fecha.dt.as_unit("ns").astype("int64") // 10**9)
-    exactos = coordinated_groups(base, window_s=ventana, min_accounts=participantes, min_tokens=minimo, min_events=2, min_size=soporte)
+    conteo = largos.groupby(["publicacion_id", "norm"]).cuenta_id.transform("nunique")
+    candidatas = base.loc[largos.index[conteo.ge(participantes)]]
+    enlaces_exactos = Counter()
+    for _, datos in candidatas.groupby(["publicacion_id", "norm"], sort=True):
+        datos = datos.sort_values("ts", kind="stable")
+        miembros = sorted(set(datos.loc[datos.ts.le(datos.ts.iloc[0] + ventana), "cuenta_id"]))
+        if len(miembros) >= participantes:
+            enlaces_exactos.update(combinations(miembros, 2))
+    red_exacta = nx.Graph()
+    red_exacta.add_edges_from(par for par, veces in sorted(enlaces_exactos.items()) if veces >= 2)
+    exactos = {cuenta:f"e{i:03d}" for i,c in enumerate(sorted(map(sorted,nx.connected_components(red_exacta))),1) if len(c)>=soporte for cuenta in c}
+    minimo_parafrasis = max(1, int(np.ceil(largo.quantile(PARAMS["q_longitud_parafrasis"]))))
+    largos = eventos[largo.ge(minimo_parafrasis)]
+    volumen = largos.groupby("publicacion_id").size()
     actividad = eventos.sort_values(["publicacion_id", "fecha", "comentario_id"], kind="stable")
     intervalos = actividad.groupby("publicacion_id").fecha.diff().dt.total_seconds()
     ritmo = intervalos[intervalos.gt(0)].groupby(actividad.publicacion_id).median()
@@ -320,12 +336,26 @@ def coordinacion(comentarios, normalizados, vectores, indices):
     ordenados = largos.sort_values(["publicacion_id", "fecha", "comentario_id"], kind="stable")
     posiciones = ordenados.index.to_numpy();pubs = ordenados.publicacion_id.to_numpy();cuentas = ordenados.cuenta_id.to_numpy()
     tiempos = ordenados.fecha.dt.as_unit("ns").astype("int64").to_numpy() / 1e9
-    cantidad = min(len(vectores), PARAMS["muestra"])
-    a = rng.integers(0, len(vectores), cantidad);b = (a + rng.integers(1, len(vectores), cantidad)) % len(vectores) if len(vectores) > 1 else a
-    fondo = np.einsum("ij,ij->i", vectores[a], vectores[b])
+    poblacion_vectores = np.unique(indices[posiciones]) if PARAMS["fondo_guiones_largos"] else np.arange(len(vectores))
+    cantidad = min(len(poblacion_vectores), PARAMS["muestra"])
+    a = rng.integers(0, len(poblacion_vectores), cantidad)
+    b = (a + rng.integers(1, len(poblacion_vectores), cantidad)) % len(poblacion_vectores) if len(poblacion_vectores)>1 else a
+    fondo = np.einsum("ij,ij->i", vectores[poblacion_vectores[a]], vectores[poblacion_vectores[b]])
     q = 1 - (1 - PARAMS["q_coseno_guion"]) / max(1.0, float(np.sqrt(volumen.median())))
     piso = float(np.quantile(fondo, q));repeticiones = defaultdict(set)
     vecinos = max(1, int(np.ceil(PARAMS["factor_vecindad_sem"] * np.log1p(len(largos)))))
+    candidatos_raw = repetidos_raw[repetidos_raw.duplicated(["publicacion_id", "guion"], keep=False)]
+    limite_raw = largos.groupby("publicacion_id").cuenta_id.nunique().map(lambda n:max(2,int(np.ceil(np.sqrt(n)))))
+    for (publicacion,guion),datos in candidatos_raw.groupby(["publicacion_id","guion"],sort=True):
+        inicio = None;miembros=set();episodios=[]
+        for cuenta,fecha in datos[["cuenta_id","fecha"]].itertuples(index=False,name=None):
+            if inicio is None or (fecha-inicio).total_seconds()>ventana_sem:
+                if 2<=len(miembros)<=limite_raw[publicacion]:episodios.append(sorted(miembros))
+                inicio=fecha;miembros=set()
+            miembros.add(cuenta)
+        if 2<=len(miembros)<=limite_raw[publicacion]:episodios.append(sorted(miembros))
+        for miembros in episodios:
+            for par in combinations(miembros,2):repeticiones[par].add((publicacion,guion))
     if ventana_sem > 0:
         for salto in range(1, min(len(ordenados), vecinos + 1)):
             cercanos = np.flatnonzero((pubs[:-salto] == pubs[salto:]) & (tiempos[salto:] - tiempos[:-salto] <= ventana_sem) & (cuentas[:-salto] != cuentas[salto:]))
@@ -333,14 +363,15 @@ def coordinacion(comentarios, normalizados, vectores, indices):
                 izq=cercanos[inicio:inicio+4096];der=izq+salto
                 similitud=np.einsum("ij,ij->i",vectores[indices[posiciones[izq]]],vectores[indices[posiciones[der]]])
                 for i,j in zip(izq[similitud>=piso],der[similitud>=piso]):
-                    repeticiones[tuple(sorted((cuentas[i],cuentas[j])))].add(pubs[i])
+                    repeticiones[tuple(sorted((cuentas[i],cuentas[j])))].add((pubs[i],normalizados.iloc[posiciones[i]]))
     pesos = {par:len(contextos) for par,contextos in repeticiones.items() if len(contextos)>=2}
     sem = nx.Graph()
     if pesos:
         corte=float(np.quantile(list(pesos.values()),PARAMS["q_peso_semantico"]))
         sem.add_weighted_edges_from((a,b,peso) for (a,b),peso in sorted(pesos.items()) if peso>=corte)
     comunidades = nx.community.louvain_communities(sem, seed=PARAMS["seed"]) if sem.number_of_edges() else []
-    semanticos = {cuenta:f"s{i:03d}" for i,c in enumerate(sorted(map(sorted,comunidades)),1) if len(c)>=soporte for cuenta in c}
+    soporte_parafrasis = max(2, int(np.ceil(PARAMS["factor_soporte_parafrasis"] * np.sqrt(np.log1p(poblacion)))))
+    semanticos = {cuenta:f"s{i:03d}" for i,c in enumerate(sorted(map(sorted,comunidades)),1) if len(c)>=soporte_parafrasis for cuenta in c}
     union = nx.Graph()
     for mapping in (exactos,semanticos):
         grupos = defaultdict(list)
@@ -355,7 +386,7 @@ def coordinacion(comentarios, normalizados, vectores, indices):
         for (grupo,pub,_),datos in seleccionados.groupby(["grupo","publicacion_id","bloque"],sort=True):
             n=datos.cuenta_id.nunique()
             if n>=2:filas.append((grupo,pub,datos.fecha.min(),datos.fecha.max(),n))
-    print(json.dumps({"coordinacion_escalada":{"ventana_exacta_s":ventana,"ventana_semantica_s":ventana_sem,"piso_coseno":piso,"soporte_comunidad":soporte,"participantes_rafaga":participantes,"min_palabras_relativo":minimo,"cuentas_exactas":len(exactos),"cuentas_semanticas":len(semanticos),"cuentas_union":len(grupos)}},sort_keys=True),flush=True)
+    print(json.dumps({"coordinacion_escalada":{"ventana_exacta_s":ventana,"ventana_semantica_s":ventana_sem,"piso_coseno":piso,"soporte_comunidad":soporte,"soporte_parafrasis":soporte_parafrasis,"participantes_rafaga":participantes,"min_palabras_relativo":minimo,"min_palabras_parafrasis":minimo_parafrasis,"cuentas_exactas":len(exactos),"cuentas_semanticas":len(semanticos),"cuentas_union":len(grupos)}},sort_keys=True),flush=True)
     return grupos,pd.DataFrame(filas,columns=RAFAGAS),ventana
 
 
