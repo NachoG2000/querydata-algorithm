@@ -207,3 +207,13 @@ Una respuesta tiene un padre existente, distinto de sí misma; lo restante se tr
 |---|---:|---:|---:|---:|---:|---:|
 | raices | 171946 | 0.8597 | 134236 | 0.452016 | 0.703063 | 0.200969 |
 | respuestas | 28054 | 0.1403 | 28054 | 0.414917 | 0.632183 | 0.197651 |
+
+### Referencia nueva de diez días
+
+El código exacto de `c7406f3`, con la única extensión del arnés, produjo A = 13.37 / 11.58 / 17.25 / 12.91 y B = 19.79 / 5.63 / 12.14 / 9.64 (completo / días 1–7 / días 8–14 / días 1–10). La precisión B fue 0.9091 / 1.0000 / 1.0000 / 1.0000. La nueva partición bloquea la aceptación igual que las mitades. La referencia fue medida en un worktree detached del commit original, sin claves.
+
+### Hipótesis A: NLI local multilingüe para postura
+
+Se probó una muestra aleatoria estructural (1.000 raíces y 1.000 respuestas, semilla 42, selección sin etiquetas). La primera formulación genérica de apoyo/rechazo no superó el método actual: no se incorpora por el mero hecho de usar un modelo. Cinco pares de hipótesis lingüísticas genéricas se compararon en la misma muestra; el mejor exploratorio obtuvo macro-F1 0,508945 con «Este texto afirma que algo es verdad» / «Este texto niega que algo sea verdad» y corte 0,35. Es selección exploratoria y no una estimación independiente de generalización. Sólo se aceptará con los puntajes oficiales en las cuatro ventanas.
+
+El candidato conserva las señales locales de rechazo y usa NLI adicional en raíces; en respuestas, NLI compara texto padre e hijo y sólo añade una relación cuando su probabilidad supera 0,65 y el enlace pasa el filtro temático vigente. Se fijan modelo y revisión públicos; los logits se guardan por modelo, tokenización y textos, sin verdad. La preparación de caché se informa por separado; el arnés compara corridas preparadas. El cierre final debe medir también la corrida realmente fría.

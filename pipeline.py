@@ -17,6 +17,12 @@ import re
 import unicodedata
 
 PARAMS = {
+    "nli_local": True,
+    "nli_modelo": "MoritzLaurer/multilingual-MiniLMv2-L6-mnli-xnli",
+    "nli_revision": "0a71e92a985b6e1ad1828cf67ce9c459639c1dca",
+    "nli_longitud": 128,
+    "nli_umbral_raiz": 0.35,
+    "nli_umbral_relacion": 0.65,
     "q_longitud_guion": 0.25,
     "q_coseno_guion": 0.975,
     "mezcla_ventana": 0.5,
@@ -506,7 +512,7 @@ AFIRMACION_CORTA = re.compile(r"^(sí|si|tal cual|exacto|exactamente|así es|asi
 CONTRADICCION = re.compile(r"^(no($|[ ,.!?])|eso es falso\b|mentira\b|nada que ver\b|no es cierto\b|para nada\b)")
 
 
-def postura(comentarios, etiquetas, centralidad, margen, motor, vectores_postura=None, indices_postura=None):
+def postura(comentarios, etiquetas, centralidad, margen, motor, vectores_postura=None, indices_postura=None, cache=None):
     from decisores import DecisionInput
 
     textos = comentarios.texto.tolist()
@@ -515,6 +521,15 @@ def postura(comentarios, etiquetas, centralidad, margen, motor, vectores_postura
     padres = np.full(len(ids), -1, dtype=np.int64)
     signos = np.ones(len(ids), dtype=np.int8)
     enlaces = [(i,posiciones[padre]) for i,padre in enumerate(comentarios.respuesta_a) if padre and padre in posiciones and posiciones[padre]!=i]
+    nli_raices = nli_relaciones = None
+    if PARAMS["nli_local"]:
+        from nli_local import LocalNLI, root_probabilities, softmax
+        with LocalNLI(cache / "nli-mejora-a", PARAMS["nli_modelo"], PARAMS["nli_revision"],
+                      max_length=PARAMS["nli_longitud"], threads=PARAMS["hilos"]) as nli:
+            nli_raices = root_probabilities(nli, textos)[:, 1]
+            if enlaces:
+                nli_relaciones = softmax(nli.logits([textos[p] for _, p in enlaces],
+                                                  [textos[i] for i, _ in enlaces]))
     longitudes=np.asarray([len(PALABRAS.findall(texto_embedding(t))) for t in textos])
     corto=float(np.quantile(longitudes,.25)) if len(longitudes) else 0
     if enlaces:
@@ -523,10 +538,18 @@ def postura(comentarios, etiquetas, centralidad, margen, motor, vectores_postura
         piso=float(np.quantile(cosenos,PARAMS["q_similitud_aristas"]))
         solicitudes=[DecisionInput(text=textos[i],labels=("acompaña","contradice","independiente"),kind="relation",context={"padre":textos[p]}) for i,p in enlaces]
         decisiones=motor.decide_local(solicitudes)
-        for (i,p),(relacion,_),coseno in zip(enlaces,decisiones,cosenos):
+        for j, ((i,p),(relacion,_),coseno) in enumerate(zip(enlaces,decisiones,cosenos)):
             limpio=texto_embedding(textos[i])
             afin=(etiquetas[i]>=0 and etiquetas[i]==etiquetas[p]) or coseno>=piso or longitudes[i]<=corto
             if not afin:continue
+            if nli_relaciones is not None:
+                probabilidades = nli_relaciones[j]
+                clase = int(probabilidades.argmax())
+                if probabilidades[clase] >= PARAMS["nli_umbral_relacion"]:
+                    if clase == 0:
+                        relacion = "acompaña"
+                    elif clase == 2:
+                        relacion = "contradice"
             if CONTRADICCION.match(limpio) or relacion=="contradice":
                 padres[i]=p;signos[i]=-1
             elif AFIRMACION_CORTA.match(limpio) or relacion=="acompaña" or (PARAMS["heredar_aristas_similares"] and coseno>=piso and etiquetas[i]==etiquetas[p] and etiquetas[p]>=0):
@@ -546,7 +569,8 @@ def postura(comentarios, etiquetas, centralidad, margen, motor, vectores_postura
     locales = motor.decide_local(map(solicitud, raices))
     orientacion = np.ones(len(ids), dtype=np.int8)
     for i, (etiqueta, _) in zip(raices, locales):
-        orientacion[i] = -1 if etiqueta == "rechaza" else 1
+        rechazo_nli = nli_raices is not None and nli_raices[i] >= PARAMS["nli_umbral_raiz"]
+        orientacion[i] = -1 if etiqueta == "rechaza" or rechazo_nli else 1
 
     ia = 0
     if motor.mode == "jev":
@@ -689,7 +713,7 @@ def reporte_referencia(datos, cache, costo, metricas):
         with ruta_csv(datos, tabla).open("rb") as archivo:
             for bloque in iter(lambda: archivo.read(1024 * 1024), b""):
                 firma.update(bloque)
-    for nombre in ("pipeline.py", "decisores.py"):
+    for nombre in ("pipeline.py", "decisores.py", "nli_local.py"):
         firma.update(Path(__file__).with_name(nombre).read_bytes())
     software = {nombre: importlib.metadata.version(nombre) for nombre in (
         "numpy", "pandas", "pyarrow", "duckdb", "torch", "sentence-transformers",
@@ -770,7 +794,7 @@ def ejecutar(datos, destino, cache, decisor):
         medir("validar_y_asignar")
         if not comentarios.fecha.notna().any():
             etiquetas[:] = -1
-        posturas, ia, ciclos = postura(comentarios, etiquetas, similitud, margen, motor, vectores, indices)
+        posturas, ia, ciclos = postura(comentarios, etiquetas, similitud, margen, motor, vectores, indices, cache)
         estadisticas = motor.stats.as_dict()
         modo = motor.mode
     detalles = comentarios.assign(
@@ -797,7 +821,7 @@ def ejecutar(datos, destino, cache, decisor):
         "usd_por_mil_comentarios": estadisticas["usd_ia"] * 1000 / max(len(comentarios), 1),
         "hardware": f"{platform.system()} {platform.machine()}, CPU, {PARAMS['hilos']} hilos",
         "almacenamiento": "DuckDB local sobre Parquet Zstandard",
-        "notas": f"Embeddings locales y decisor {modo}.",
+        "notas": f"Embeddings y NLI locales; decisor {modo}.",
         "fraccion_ia": fraccion,
     }
     metricas = {
