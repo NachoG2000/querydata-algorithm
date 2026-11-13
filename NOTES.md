@@ -129,3 +129,81 @@ Auditoría de separación sobre la configuración final, sólo con IDs, bandera 
 | H3 | 70.42% | 99.24% | Sí | 0.00 |
 
 Queda separación pendiente antes de ajustar `fecha_origen`. Las mejoras del completo que perdían puntos en una mitad se descartaron; corregir una fecha de un cluster mezclado no sustituye separar la narrativa. Se mantiene el orden del backlog de `program.md`.
+
+## Diagnóstico de narrativas para mejora A
+
+Medición del código congelado en `c7406f3`, con las predicciones idénticas publicadas en `8a1f5be`. No se cambió `pipeline.py`. La verdad se leyó sólo como IDs y etiquetas para medir, sin descripciones ni vocabulario. El conjunto de B-cubed es exactamente el del scorer oficial: comentarios con narrativa verdadera; las predicciones vacías cuentan como singletons.
+
+B-cubed oficial: precisión **0.594190**, recall **0.307583**, F1 **0.405340**. La pérdida de recall (0.692417) supera la de precisión (0.405810): domina la **fragmentación** global, aunque sigue habiendo fusión, especialmente en emergentes. No se infiere esto sólo del número de clusters; se pondera cada comentario como el scorer.
+
+### Fragmentación por narrativa verdadera
+
+| ID de evaluación | Comentarios | Clusters asignados | Predichos ruido | Captura dominante | P B-cubed | R B-cubed | Fragmentos efectivos |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| B1 | 15608 | 17 | 1465 | 0.2248 | 0.5856 | 0.1333 | 7.50 |
+| B2 | 16605 | 14 | 1604 | 0.5955 | 0.7059 | 0.3809 | 2.63 |
+| B3 | 11848 | 14 | 1143 | 0.7039 | 0.7592 | 0.5119 | 1.95 |
+| B4 | 8626 | 10 | 389 | 0.4739 | 0.4213 | 0.3085 | 3.24 |
+| H1 | 16474 | 18 | 2094 | 0.2861 | 0.5690 | 0.1374 | 7.28 |
+| H2 | 14501 | 18 | 1220 | 0.6678 | 0.7220 | 0.4654 | 2.15 |
+| H3 | 3513 | 11 | 195 | 0.7042 | 0.7607 | 0.5216 | 1.92 |
+| H4 | 12538 | 11 | 1508 | 0.2519 | 0.5668 | 0.1472 | 6.79 |
+| L1 | 18463 | 9 | 1023 | 0.6464 | 0.7112 | 0.4591 | 2.18 |
+| L2 | 16163 | 13 | 1178 | 0.3613 | 0.4153 | 0.1835 | 5.45 |
+| L3 | 9462 | 14 | 1798 | 0.1944 | 0.3359 | 0.0878 | 11.39 |
+| L4 | 11331 | 13 | 1648 | 0.3366 | 0.6586 | 0.1827 | 5.47 |
+| L5 | 7158 | 9 | 221 | 0.8952 | 0.3959 | 0.8035 | 1.24 |
+
+Los clusters asignados excluyen «ninguna»; los fragmentos efectivos son `1 / recall B-cubed` de esa narrativa y sí incluyen el efecto de predicciones vacías como singletons.
+
+### Fusión por cluster predicho
+
+| Cluster | Comentarios | Narrativas verdaderas distintas | Dominante | Pureza sin ruido | Fracción ruido verdadero |
+|---|---:|---:|---|---:|---:|
+| n001 | 15856 | 13 | L5 | 0.4056 | 0.0036 |
+| n002 | 13252 | 3 | L1 | 0.9006 | 0.0000 |
+| n003 | 12373 | 4 | H2 | 0.8358 | 0.0635 |
+| n004 | 3314 | 5 | B1 | 0.5202 | 0.0000 |
+| n005 | 2494 | 4 | H3 | 0.9924 | 0.0004 |
+| n006 | 10462 | 12 | B4 | 0.4937 | 0.2085 |
+| n007 | 4747 | 6 | H1 | 0.9930 | 0.0000 |
+| n008 | 3940 | 5 | H4 | 0.8015 | 0.0000 |
+| n009 | 3077 | 4 | H2 | 0.5876 | 0.0000 |
+| n010 | 2374 | 7 | H1 | 0.6057 | 0.0000 |
+| n011 | 11448 | 6 | B2 | 0.8638 | 0.0000 |
+| n012 | 9349 | 5 | B3 | 0.8921 | 0.0000 |
+| n013 | 6450 | 11 | B1 | 0.3955 | 0.0000 |
+| n014 | 9086 | 7 | L2 | 0.6426 | 0.0000 |
+| n015 | 3523 | 4 | B1 | 0.9960 | 0.0000 |
+| n016 | 5582 | 5 | B2 | 0.2807 | 0.0000 |
+| n017 | 3961 | 13 | L4 | 0.6105 | 0.0000 |
+| n018 | 4549 | 9 | H4 | 0.5489 | 0.0000 |
+| n019 | 3694 | 6 | H4 | 0.5998 | 0.3032 |
+| n020 | 5623 | 7 | L4 | 0.9631 | 0.2957 |
+| n021 | 7283 | 10 | B2 | 0.3639 | 0.4876 |
+| n022 | 3202 | 7 | H1 | 0.4804 | 0.0781 |
+| n023 | 5467 | 13 | B4 | 0.3867 | 0.0000 |
+| n024 | 5307 | 5 | B1 | 0.5101 | 0.0000 |
+
+La composición completa por IDs y las contribuciones ponderadas a la pérdida de precisión y recall están en `.cache/mejora-a/diagnostico-narrativas.json`. Estos IDs no se usan en producción.
+
+### Postura verdadera y predicha
+
+La comparación usa sólo comentarios con narrativa verdadera, como el macro-F1 oficial. Una postura vacía sigue contando como error de recall.
+
+| Clase | Verdad | Predicción |
+|---|---:|---:|
+| apoya | 85197 | 138157 |
+| rechaza | 77093 | 8647 |
+| vacía | 0 | 15486 |
+
+Entre las posturas no vacías, **94.11%** son «apoya». Macro-F1 oficial de postura: **0.446124**. El sesgo de clase se mide condicionado a posturas emitidas, sin ocultar las vacías de la tabla.
+
+### Raíces y respuestas
+
+Una respuesta tiene un padre existente, distinto de sí misma; lo restante se trata como raíz para este diagnóstico, igual que el camino de respaldo. Se informa la fracción sobre todos los comentarios y el macro-F1 sólo sobre narrativas verdaderas.
+
+| Grupo | Comentarios totales | Fracción del set | Comentarios con narrativa verdadera | Macro-F1 postura | F1 apoya | F1 rechaza |
+|---|---:|---:|---:|---:|---:|---:|
+| raices | 171946 | 0.8597 | 134236 | 0.452016 | 0.703063 | 0.200969 |
+| respuestas | 28054 | 0.1403 | 28054 | 0.414917 | 0.632183 | 0.197651 |
