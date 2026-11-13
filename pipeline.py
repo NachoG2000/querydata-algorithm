@@ -29,6 +29,7 @@ PARAMS = {
     "min_samples": 10,
     "min_palabras": 4,
     "percentil_candidata": 0.25,
+    "percentil_fusion": 0.5,
     "percentil_nucleo": 0.50,
     "percentil_asignacion": 0.10,
     "percentil_ventana": 0.25,
@@ -228,6 +229,22 @@ def agrupar(vectores, aptos):
     modelo = hdbscan.HDBSCAN(min_cluster_size=PARAMS["min_cluster_size"], min_samples=PARAMS["min_samples"],
                             core_dist_n_jobs=1)
     etiquetas = modelo.fit_predict(reducido)
+    etiquetas_validas = sorted(set(etiquetas) - {-1})
+    if len(etiquetas_validas) > 1:
+        from sklearn.cluster import AgglomerativeClustering
+
+        centros_previos = np.asarray([muestra[etiquetas == i].mean(axis=0) for i in etiquetas_validas])
+        centros_previos /= np.maximum(np.linalg.norm(centros_previos, axis=1, keepdims=True), 1e-8)
+        distancias = np.clip(1 - centros_previos @ centros_previos.T, 0, 2)
+        np.fill_diagonal(distancias, np.inf)
+        umbral = float(np.quantile(distancias.min(axis=1), PARAMS["percentil_fusion"]))
+        if umbral > 0:
+            fusion = AgglomerativeClustering(n_clusters=None, distance_threshold=umbral,
+                                            metric="cosine", linkage="average").fit_predict(centros_previos)
+            nuevas = np.full(len(etiquetas), -1, dtype=np.int32)
+            for etiqueta, grupo in zip(etiquetas_validas, fusion):
+                nuevas[etiquetas == etiqueta] = grupo
+            etiquetas = nuevas
     centros, pisos = [], []
     for etiqueta in sorted(set(etiquetas) - {-1}):
         grupo = muestra[etiquetas == etiqueta]
