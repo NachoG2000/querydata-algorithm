@@ -32,13 +32,15 @@ PARAMS = {
     "percentil_fusion": 0.5,
     "percentil_nucleo": 0.50,
     "percentil_asignacion": 0.0,
+    "percentil_intervalo_guion": 0.5,
     "percentil_ventana": 0.25,
-    "percentil_aristas": 0.75,
+    "percentil_aristas": 0.5,
     "min_palabras_guion": 6,
+    "min_cuentas_grupo": 4,
     "min_coincidencias": 2,
     "max_cuentas_rafaga": 64,
     "vecinos_temporales": 12,
-    "coseno_guion": 0.70,
+    "coseno_guion": 0.9,
     "percentil_estado": 0.25,
     "percentil_amplificada": 0.75,
     "fraccion_jev": 0.01,
@@ -260,19 +262,32 @@ def agrupar(vectores, aptos):
     return Candidatas(etiquetas, centroides, pisos, similitud)
 
 
+def texto_guion(texto):
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(c for c in texto if unicodedata.category(c) != "Mn")
+    texto = re.sub(r"#\w+", " ", texto)
+    texto = re.sub(r"(\w)\1{2,}", r"\1", texto)
+    return " ".join(PALABRAS.findall(texto))
+
+
 def coordinacion(comentarios, normalizados, vectores, indices):
-    eventos = comentarios[["publicacion_id", "cuenta_id", "fecha"]].assign(guion=normalizados)
+    eventos = comentarios[["publicacion_id", "cuenta_id", "fecha"]].assign(guion=normalizados.map(texto_guion))
     eventos = eventos[eventos.fecha.notna() & eventos.cuenta_id.ne("") & eventos.publicacion_id.ne("")]
     actividad = eventos.sort_values(["publicacion_id", "fecha"])
     intervalos = actividad.groupby("publicacion_id").fecha.diff().dt.total_seconds()
     ritmo = intervalos[intervalos.gt(0)].groupby(actividad.publicacion_id).median()
     ventana = float(ritmo.quantile(PARAMS["percentil_ventana"])) if len(ritmo) else 0
     largos = eventos[eventos.guion.map(lambda texto: len(PALABRAS.findall(texto)) >= PARAMS["min_palabras_guion"])]
+    repetidos = largos.sort_values(["publicacion_id", "guion", "fecha"], kind="stable")
+    ritmo_guion = repetidos.groupby(["publicacion_id", "guion"]).fecha.diff().dt.total_seconds()
+    positivos = ritmo_guion[ritmo_guion.gt(0)]
+    if len(positivos) and ventana > 0:
+        ventana = float(np.sqrt(ventana * positivos.quantile(PARAMS["percentil_intervalo_guion"])))
     candidatos = largos[largos.duplicated(["publicacion_id", "guion"], keep=False)]
     aristas = defaultdict(set)
     eventos_similares = defaultdict(set)
     rafagas = []
-    for (publicacion, _), grupo in candidatos.groupby(["publicacion_id", "guion"], sort=True):
+    for (publicacion, guion), grupo in candidatos.groupby(["publicacion_id", "guion"], sort=True):
         primer_evento = len(rafagas)
         inicio = None
         cuentas = set()
@@ -287,7 +302,7 @@ def coordinacion(comentarios, normalizados, vectores, indices):
             rafagas.append((publicacion, inicio, fin, sorted(cuentas)))
         for _, desde, _, miembros in rafagas[primer_evento:]:
             for par in combinations(miembros, 2):
-                aristas[par].add(publicacion)
+                aristas[par].add((publicacion, guion))
     ordenados = largos.sort_values(["publicacion_id", "fecha"], kind="stable")
     publicaciones = ordenados.publicacion_id.to_numpy()
     segundos = ordenados.fecha.dt.as_unit("ns").astype("int64").to_numpy() // 10**9
@@ -305,10 +320,10 @@ def coordinacion(comentarios, normalizados, vectores, indices):
                 for a, b in zip(izq[similitud >= PARAMS["coseno_guion"]], der[similitud >= PARAMS["coseno_guion"]]):
                     par = tuple(sorted((cuentas[a], cuentas[b])))
                     publicacion = publicaciones[a]
-                    aristas[par].add(publicacion)
+                    aristas[par].add((publicacion, normalizados.iloc[posiciones[a]]))
                     cubo = int(segundos[a]) // max(1, int(ventana))
                     eventos_similares[publicacion, cubo].update((a, b))
-    # Una publicación aporta como máximo un voto por par.
+    # Cada guion independiente por publicación aporta como máximo un voto por par.
     pesos = {par: len(publicaciones) for par, publicaciones in aristas.items()}
     pesos = {par: peso for par, peso in pesos.items() if peso >= PARAMS["min_coincidencias"]}
     grafo = nx.Graph()
@@ -316,6 +331,7 @@ def coordinacion(comentarios, normalizados, vectores, indices):
         umbral = np.quantile(list(pesos.values()), PARAMS["percentil_aristas"])
         grafo.add_weighted_edges_from((a, b, peso) for (a, b), peso in sorted(pesos.items()) if peso >= umbral)
     comunidades = nx.community.louvain_communities(grafo, seed=PARAMS["seed"]) if grafo.number_of_edges() else []
+    comunidades = [grupo for grupo in comunidades if len(grupo) >= PARAMS["min_cuentas_grupo"]]
     grupos = {cuenta: f"g{i:03d}" for i, comunidad in enumerate(sorted(map(sorted, comunidades)), 1) for cuenta in comunidad}
     for (publicacion, _), hits in sorted(eventos_similares.items()):
         miembros = sorted({cuentas[i] for i in hits if cuentas[i] in grupos})
