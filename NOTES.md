@@ -115,3 +115,17 @@ Experimento 34, repetición exacta del código archivado de la variante 23, sin 
 | dia_8_14 | 17.20 | 4.33 | 1.000 | 44.319 |
 
 **Descartada**: B completo 9,35 < 9,44 y días 1–7 0,38 < 1,60. La mejora de días 8–14 a 4,33 no compensa esas pérdidas. La primera mitad conserva su veto por la evidencia descrita arriba. El tiempo completo 50,739 s no supera el límite del 30% frente al mismo pipeline de A en la referencia 31 (54,685 s); no decide este rechazo. A no cambió. La fila 34 permanece en `experiments.tsv` y se restauró el código de trabajo previo; la siguiente fase debe establecer B de alta precisión con umbrales normalizados por exposición.
+
+### Estado al cierre del bucle por tarea
+
+límite de las 07:00 de Argentina del 13/11/2026; 139 filas. Última hipótesis aceptada: 137. La reevaluación de la variante 23 sigue registrada como descartada en la fila 34. La tabla final de puntajes y tiempos está en `RESULTS.md`.
+
+Auditoría de separación sobre la configuración final, sólo con IDs, bandera de emergente y fechas de la verdad; no se leyeron descripciones ni se incorporaron etiquetas al predictor. «Propio» exige mayoría estricta de la narrativa emergente entre los comentarios con narrativa verdadera del cluster dominante; es un diagnóstico, no una métrica de aceptación sustitutiva.
+
+| ID de evaluación | Captura | Pureza | Cluster propio | Error de origen, h |
+|---|---:|---:|---|---:|
+| L5 | 89.52% | 40.56% | No | -144.74 |
+| B4 | 47.39% | 49.37% | No | -229.88 |
+| H3 | 70.42% | 99.24% | Sí | 0.00 |
+
+Queda separación pendiente antes de ajustar `fecha_origen`. Las mejoras del completo que perdían puntos en una mitad se descartaron; corregir una fecha de un cluster mezclado no sustituye separar la narrativa. Se mantiene el orden del backlog de `program.md`.

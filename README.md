@@ -124,4 +124,8 @@ Para la demo estática, crea un proyecto Quartz, importa `vault/` como contenido
 
 ## Código y dependencias previas
 
-`ejemplos/linea_base.py` y `evaluacion/puntuar.py` son copias del código oficial de QualyData en el commit citado. El pipeline, la evaluación por ventanas y el exportador se prepararon para el hackathon. DuckDB, PyArrow, pandas, NumPy, scikit-learn, UMAP, HDBSCAN, NetworkX, PyTorch, Transformers, Sentence Transformers y MiniLM son dependencias públicas preexistentes. Jev es un servicio externo opcional.
+`ejemplos/linea_base.py` y `evaluacion/puntuar.py` son copias del código oficial de QualyData en el commit citado. El pipeline, la evaluación por ventanas y el exportador se prepararon para el hackathon. DuckDB, PyArrow, pandas, NumPy, scikit-learn, UMAP, HDBSCAN, NetworkX, PyTorch, Transformers, Sentence Transformers, MiniLM y E5 son dependencias públicas preexistentes. Jev es un servicio externo opcional.
+
+### Caché y evaluación de la configuración actual
+
+Los encoders locales están fijados por modelo y revisión en `pipeline.py`. La coordinación usa evidencia complementaria de MiniLM y E5, independientemente de la representación de narrativas. Preparar modelos y embeddings antes de comparar tiempos del arnés; una entrada con textos nuevos necesita su primera codificación. Los puntajes, tiempos y límites de la búsqueda están en `RESULTS.md`, `NOTES.md` y `experiments.tsv`.

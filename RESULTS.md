@@ -78,3 +78,19 @@ El equipo usado para las mediciones fue macOS arm64, CPU con cuatro hilos para e
 | 20 | 4.000.000 | Pendiente | Pendiente | Pendiente |
 
 La corrida local registró 0 tokens, USD 0 por mil comentarios y 0 % de comentarios procesados por API. La curva en `salida/escala/resultados.tsv` usa caché de embeddings caliente y separa el tiempo de crear la réplica. Cada factor de escala publicado aquí corresponde a una sola medición.
+
+## Cierre de la búsqueda por tarea
+
+Cierre por límite de las 07:00 de Argentina del 13/11/2026. La verificación final es la fila 139; la última hipótesis aceptada fue la 137. El código conserva SHA-256 `37c85259d684960a762a4d748437631d7c13f903bd35bc2ec6a747d9667c41e6`. Se conservaron las filas descartadas y no se modificaron el arnés, el scorer ni los datos.
+
+| Partición | A / 30 | B / 25 | Oficial / 55 | Precisión B | Recall B | Pipeline, s |
+|---|---:|---:|---:|---:|---:|---:|
+| completo | 13.37 | 19.79 | 33.16 | 0.9091 | 0.6957 | 68.546 |
+| dia_1_7 | 11.58 | 5.63 | 17.21 | 1.0000 | 0.1667 | 55.061 |
+| dia_8_14 | 17.25 | 12.14 | 29.39 | 1.0000 | 0.3894 | 55.212 |
+
+Tiempo total del arnés: **193.497 s**. La tabla muestra puntos oficiales; las columnas históricas combinadas del TSV conservan las penalizaciones del arnés y no decidieron la aceptación.
+
+Los mayores tiempos del completo fueron `agrupar` (41.125 s), `coordinacion` (18.367 s). Los tiempos usan caché local de embeddings preparada; no representan el costo de descargar modelos ni de codificar por primera vez textos de una entrada nueva. El modo local registró cero tokens y cero dólares de API.
+
+Las narrativas se compararon por A y la coordinación por B; ninguna partición se eximió por baja actividad. El soporte usa población y volumen observados; las ventanas se estiman de las demoras y la cadencia de la entrada, sin asumir 14 días. La expansión de operaciones exige publicaciones independientes y vecinos relativos al tamaño de la operación.
