@@ -27,7 +27,7 @@ PARAMS = {
     "n_components": 5,
     "min_cluster_size": 100,
     "min_samples": 10,
-    "min_palabras": 4,
+    "min_palabras": 6,
     "percentil_candidata": 0.25,
     "percentil_fusion": 0.5,
     "percentil_nucleo": 0.50,
