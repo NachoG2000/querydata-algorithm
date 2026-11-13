@@ -35,7 +35,7 @@ PARAMS = {
     "revision_coordinacion_aux": 'a3ded7f4d0d725c6fc251504622d65b2516a3aa1',
     "modo_coordinacion": 'union',
     "q_coseno_aux": 0.97,
-    "q_coseno_expansion": 0.975,
+    "q_coseno_expansion": 0.95,
     "factor_ventana_expansion": 0.25,
     "factor_vecinos_expansion": 2,
     "seed": 42,
