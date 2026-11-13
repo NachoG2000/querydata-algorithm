@@ -103,3 +103,15 @@ La variante 31 no es una referencia admisible para B con precisión ≥0,9: marc
 Referencias del protocolo nuevo: A conserva 13,13 / 11,46 / 17,20 puntos de narrativas; B se contrasta con la base oficial de alta precisión 9,44 / 1,60 / 0,39. Esto reinicia el comparador por tarea bajo una exigencia nueva; no reescribe los resultados históricos. Los tiempos se comparan con el mismo pipeline de A y caché, no contra el TF-IDF más rápido de la base.
 
 Archivos de auditoría local: `.cache/diagnostico/coordinacion.json`, `evidencia.json`, `narrativas.json` y `salida/diagnostico/`. Las copias aisladas reproducen la variante 23 archivada y el commit `c7cc601` (variante 31). SHA-256 de `pipeline.py` durante todo el diagnóstico: `620a824d40fa2aa03a6018d03c48afa61577eb720bbf00ad47b8fcb3189c63d6`.
+
+### Reevaluación de la variante 23 con el protocolo por tarea
+
+Experimento 34, repetición exacta del código archivado de la variante 23, sin claves. `python eval.py` completó las tres particiones en **153,194 s**.
+
+| Partición | A oficial / 30 | B oficial / 25 | Precisión B | Tiempo pipeline, s |
+|---|---:|---:|---:|---:|
+| completo | 13.13 | 9.35 | 1.000 | 50.739 |
+| dia_1_7 | 11.46 | 0.38 | 0.000 | 44.425 |
+| dia_8_14 | 17.20 | 4.33 | 1.000 | 44.319 |
+
+**Descartada**: B completo 9,35 < 9,44 y días 1–7 0,38 < 1,60. La mejora de días 8–14 a 4,33 no compensa esas pérdidas. La primera mitad conserva su veto por la evidencia descrita arriba. El tiempo completo 50,739 s no supera el límite del 30% frente al mismo pipeline de A en la referencia 31 (54,685 s); no decide este rechazo. A no cambió. La fila 34 permanece en `experiments.tsv` y se restauró el código de trabajo previo; la siguiente fase debe establecer B de alta precisión con umbrales normalizados por exposición.
