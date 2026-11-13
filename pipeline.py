@@ -34,7 +34,7 @@ PARAMS = {
     "modelo_coordinacion_aux": 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
     "revision_coordinacion_aux": 'a3ded7f4d0d725c6fc251504622d65b2516a3aa1',
     "modo_coordinacion": 'union',
-    "q_coseno_aux": 0.975,
+    "q_coseno_aux": 0.97,
     "seed": 42,
     "modelo": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "revision": "a3ded7f4d0d725c6fc251504622d65b2516a3aa1",
