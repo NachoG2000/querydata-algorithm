@@ -29,6 +29,12 @@ PARAMS = {
     "q_longitud_parafrasis": 0.2,
     "factor_soporte_parafrasis": 1.0,
     "fondo_guiones_largos": False,
+    "modelo_coordinacion_base": 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
+    "revision_coordinacion_base": 'a3ded7f4d0d725c6fc251504622d65b2516a3aa1',
+    "modelo_coordinacion_aux": 'intfloat/multilingual-e5-small',
+    "revision_coordinacion_aux": '614241f622f53c4eeff9890bdc4f31cfecc418b3',
+    "modo_coordinacion": 'reemplazo',
+    "q_coseno_aux": 0.975,
     "seed": 42,
     "modelo": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "revision": "a3ded7f4d0d725c6fc251504622d65b2516a3aa1",
@@ -150,14 +156,14 @@ def texto_embedding(texto):
     return ESPACIOS.sub(" ", limpio).strip()
 
 
-def embeddings(comentarios, cache):
+def embeddings(comentarios, cache, modelo=None, revision=None):
     textos = comentarios.texto.map(texto_embedding)
     indices, unicos = pd.factorize(textos, sort=True)
     if len(unicos) == 0:
         return np.empty((0, 0), dtype=np.float32), indices
     claves = [sha256(texto.encode()).digest() for texto in unicos]
-    modelo = PARAMS["modelo"]
-    revision = PARAMS["revision"]
+    modelo = modelo or PARAMS["modelo"]
+    revision = revision or PARAMS["revision"]
     huella = sha256(f"{modelo}/{revision}/texto-v1".encode()).hexdigest()[:12]
     nombre = f"{Path(modelo).name}-{huella}"
     carpeta = cache / "embeddings"
@@ -282,7 +288,8 @@ def texto_guion(texto):
     return " ".join(PALABRAS.findall(texto))
 
 
-def coordinacion(comentarios, normalizados, vectores, indices):
+def coordinacion(comentarios, normalizados, vectores, indices, config=None):
+    config = {**PARAMS, **(config or {})}
     from sklearn.mixture import GaussianMixture
     from ejemplos.linea_base import normalize
 
@@ -291,25 +298,25 @@ def coordinacion(comentarios, normalizados, vectores, indices):
     if len(eventos) < 2:
         return {}, pd.DataFrame(columns=RAFAGAS), 0.0
     largo = eventos.norm.str.split().str.len()
-    minimo = max(1, int(np.ceil(largo.quantile(PARAMS["q_longitud_guion"]))));largos = eventos[largo.ge(minimo)]
+    minimo = max(1, int(np.ceil(largo.quantile(config["q_longitud_guion"]))));largos = eventos[largo.ge(minimo)]
     if len(largos) < 2:
         return {}, pd.DataFrame(columns=RAFAGAS), 0.0
     repetidos = largos.sort_values(["publicacion_id", "norm", "fecha"], kind="stable")
     intervalos = repetidos.groupby(["publicacion_id", "norm"]).fecha.diff().dt.total_seconds()
     positivos = intervalos[intervalos.gt(0)].to_numpy()
-    rng = np.random.default_rng(PARAMS["seed"])
+    rng = np.random.default_rng(config["seed"])
     if len(positivos) >= 2:
-        muestra = np.sort(rng.choice(len(positivos), min(len(positivos), PARAMS["muestra"]), replace=False))
-        mezcla = GaussianMixture(n_components=2, n_init=3, random_state=PARAMS["seed"], reg_covar=1e-6).fit(np.log1p(positivos[muestra]).reshape(-1, 1))
+        muestra = np.sort(rng.choice(len(positivos), min(len(positivos), config["muestra"]), replace=False))
+        mezcla = GaussianMixture(n_components=2, n_init=3, random_state=config["seed"], reg_covar=1e-6).fit(np.log1p(positivos[muestra]).reshape(-1, 1))
         medias = np.sort(mezcla.means_.ravel())
-        ventana = float(np.expm1((1 - PARAMS["mezcla_ventana"]) * medias[0] + PARAMS["mezcla_ventana"] * medias[1]))
+        ventana = float(np.expm1((1 - config["mezcla_ventana"]) * medias[0] + config["mezcla_ventana"] * medias[1]))
     else:
         ventana = float(np.median(positivos)) if len(positivos) else 0.0
     if ventana <= 0:
         return {}, pd.DataFrame(columns=RAFAGAS), 0.0
     poblacion = eventos.cuenta_id.nunique();volumen = largos.groupby("publicacion_id").size()
-    soporte = max(2, int(np.ceil(PARAMS["factor_soporte"] * np.sqrt(np.log1p(poblacion)))))
-    participantes = max(2, int(np.ceil(np.log1p(volumen.mean()) / PARAMS["factor_rafaga"])))
+    soporte = max(2, int(np.ceil(config["factor_soporte"] * np.sqrt(np.log1p(poblacion)))))
+    participantes = max(2, int(np.ceil(np.log1p(volumen.mean()) / config["factor_rafaga"])))
     base = eventos.assign(ts=eventos.fecha.dt.as_unit("ns").astype("int64") // 10**9)
     conteo = largos.groupby(["publicacion_id", "norm"]).cuenta_id.transform("nunique")
     candidatas = base.loc[largos.index[conteo.ge(participantes)]]
@@ -322,28 +329,28 @@ def coordinacion(comentarios, normalizados, vectores, indices):
     red_exacta = nx.Graph()
     red_exacta.add_edges_from(par for par, veces in sorted(enlaces_exactos.items()) if veces >= 2)
     exactos = {cuenta:f"e{i:03d}" for i,c in enumerate(sorted(map(sorted,nx.connected_components(red_exacta))),1) if len(c)>=soporte for cuenta in c}
-    minimo_parafrasis = max(1, int(np.ceil(largo.quantile(PARAMS["q_longitud_parafrasis"]))))
+    minimo_parafrasis = max(1, int(np.ceil(largo.quantile(config["q_longitud_parafrasis"]))))
     largos = eventos[largo.ge(minimo_parafrasis)]
     volumen = largos.groupby("publicacion_id").size()
     actividad = eventos.sort_values(["publicacion_id", "fecha", "comentario_id"], kind="stable")
     intervalos = actividad.groupby("publicacion_id").fecha.diff().dt.total_seconds()
     ritmo = intervalos[intervalos.gt(0)].groupby(actividad.publicacion_id).median()
-    rapido = float(ritmo.quantile(PARAMS["q_ritmo_publicacion"])) if len(ritmo) else 0.0
+    rapido = float(ritmo.quantile(config["q_ritmo_publicacion"])) if len(ritmo) else 0.0
     repetidos_raw = largos.assign(guion=normalizados.loc[largos.index]).sort_values(["publicacion_id", "guion", "fecha"], kind="stable")
     diferencias = repetidos_raw.groupby(["publicacion_id", "guion"]).fecha.diff().dt.total_seconds()
     positivos_raw = diferencias[diferencias.gt(0)]
-    ventana_sem = min(ventana, float(np.sqrt(rapido * positivos_raw.quantile(PARAMS["q_demora_guion"])))) if len(positivos_raw) and rapido > 0 else 0.0
+    ventana_sem = min(ventana, float(np.sqrt(rapido * positivos_raw.quantile(config["q_demora_guion"])))) if len(positivos_raw) and rapido > 0 else 0.0
     ordenados = largos.sort_values(["publicacion_id", "fecha", "comentario_id"], kind="stable")
     posiciones = ordenados.index.to_numpy();pubs = ordenados.publicacion_id.to_numpy();cuentas = ordenados.cuenta_id.to_numpy()
     tiempos = ordenados.fecha.dt.as_unit("ns").astype("int64").to_numpy() / 1e9
-    poblacion_vectores = np.unique(indices[posiciones]) if PARAMS["fondo_guiones_largos"] else np.arange(len(vectores))
-    cantidad = min(len(poblacion_vectores), PARAMS["muestra"])
+    poblacion_vectores = np.unique(indices[posiciones]) if config["fondo_guiones_largos"] else np.arange(len(vectores))
+    cantidad = min(len(poblacion_vectores), config["muestra"])
     a = rng.integers(0, len(poblacion_vectores), cantidad)
     b = (a + rng.integers(1, len(poblacion_vectores), cantidad)) % len(poblacion_vectores) if len(poblacion_vectores)>1 else a
     fondo = np.einsum("ij,ij->i", vectores[poblacion_vectores[a]], vectores[poblacion_vectores[b]])
-    q = 1 - (1 - PARAMS["q_coseno_guion"]) / max(1.0, float(np.sqrt(volumen.median())))
+    q = 1 - (1 - config["q_coseno_guion"]) / max(1.0, float(np.sqrt(volumen.median())))
     piso = float(np.quantile(fondo, q));repeticiones = defaultdict(set)
-    vecinos = max(1, int(np.ceil(PARAMS["factor_vecindad_sem"] * np.log1p(len(largos)))))
+    vecinos = max(1, int(np.ceil(config["factor_vecindad_sem"] * np.log1p(len(largos)))))
     candidatos_raw = repetidos_raw[repetidos_raw.duplicated(["publicacion_id", "guion"], keep=False)]
     limite_raw = largos.groupby("publicacion_id").cuenta_id.nunique().map(lambda n:max(2,int(np.ceil(np.sqrt(n)))))
     for (publicacion,guion),datos in candidatos_raw.groupby(["publicacion_id","guion"],sort=True):
@@ -367,10 +374,10 @@ def coordinacion(comentarios, normalizados, vectores, indices):
     pesos = {par:len(contextos) for par,contextos in repeticiones.items() if len(contextos)>=2}
     sem = nx.Graph()
     if pesos:
-        corte=float(np.quantile(list(pesos.values()),PARAMS["q_peso_semantico"]))
+        corte=float(np.quantile(list(pesos.values()),config["q_peso_semantico"]))
         sem.add_weighted_edges_from((a,b,peso) for (a,b),peso in sorted(pesos.items()) if peso>=corte)
-    comunidades = nx.community.louvain_communities(sem, seed=PARAMS["seed"]) if sem.number_of_edges() else []
-    soporte_parafrasis = max(2, int(np.ceil(PARAMS["factor_soporte_parafrasis"] * np.sqrt(np.log1p(poblacion)))))
+    comunidades = nx.community.louvain_communities(sem, seed=config["seed"]) if sem.number_of_edges() else []
+    soporte_parafrasis = max(2, int(np.ceil(config["factor_soporte_parafrasis"] * np.sqrt(np.log1p(poblacion)))))
     semanticos = {cuenta:f"s{i:03d}" for i,c in enumerate(sorted(map(sorted,comunidades)),1) if len(c)>=soporte_parafrasis for cuenta in c}
     union = nx.Graph()
     for mapping in (exactos,semanticos):
@@ -388,6 +395,25 @@ def coordinacion(comentarios, normalizados, vectores, indices):
             if n>=2:filas.append((grupo,pub,datos.fecha.min(),datos.fecha.max(),n))
     print(json.dumps({"coordinacion_escalada":{"ventana_exacta_s":ventana,"ventana_semantica_s":ventana_sem,"piso_coseno":piso,"soporte_comunidad":soporte,"soporte_parafrasis":soporte_parafrasis,"participantes_rafaga":participantes,"min_palabras_relativo":minimo,"min_palabras_parafrasis":minimo_parafrasis,"cuentas_exactas":len(exactos),"cuentas_semanticas":len(semanticos),"cuentas_union":len(grupos)}},sort_keys=True),flush=True)
     return grupos,pd.DataFrame(filas,columns=RAFAGAS),ventana
+
+
+def unir_detecciones(resultados):
+    grafo = nx.Graph()
+    for grupos, _, _ in resultados:
+        comunidades = defaultdict(list)
+        for cuenta, grupo in grupos.items(): comunidades[grupo].append(cuenta)
+        for miembros in comunidades.values():
+            miembros = sorted(miembros);grafo.add_nodes_from(miembros)
+            grafo.add_edges_from((miembros[0], cuenta) for cuenta in miembros[1:])
+    grupos = {cuenta:f"g{i:03d}" for i,c in enumerate(sorted(map(sorted,nx.connected_components(grafo))),1) for cuenta in c}
+    tablas=[]
+    for anteriores,tabla,_ in resultados:
+        if not tabla.empty:
+            equivalencia={grupo:grupos[cuenta] for cuenta,grupo in anteriores.items()}
+            tablas.append(tabla.assign(grupo=tabla.grupo.map(equivalencia)))
+    rafagas=pd.concat(tablas,ignore_index=True).drop_duplicates() if tablas else pd.DataFrame(columns=RAFAGAS)
+    if not rafagas.empty:rafagas=rafagas.sort_values(["grupo","publicacion_id","inicio","fin","cuentas"],kind="stable").reset_index(drop=True)
+    return grupos,rafagas,max(r[2] for r in resultados)
 
 
 def validar_candidatas(comentarios, candidatas, grupos, motor):
@@ -654,7 +680,20 @@ def ejecutar(datos, destino, cache, decisor):
     aptos = np.asarray([len(PALABRAS.findall(t)) >= PARAMS["min_palabras"] for t in unicos], dtype=bool)
     candidatas = agrupar(vectores, aptos)
     medir("agrupar")
-    grupos, rafagas, ventana = coordinacion(comentarios, normalizados, vectores, indices)
+    if (PARAMS["modelo_coordinacion_aux"], PARAMS["revision_coordinacion_aux"]) == (PARAMS["modelo"], PARAMS["revision"]):
+        vectores_aux, indices_aux = vectores, indices
+    else:
+        vectores_aux, indices_aux = embeddings(comentarios, cache, PARAMS["modelo_coordinacion_aux"], PARAMS["revision_coordinacion_aux"])
+    nueva = coordinacion(comentarios, normalizados, vectores_aux, indices_aux, {"q_coseno_guion": PARAMS["q_coseno_aux"]})
+    if PARAMS["modo_coordinacion"] == "union":
+        if (PARAMS["modelo_coordinacion_base"], PARAMS["revision_coordinacion_base"]) == (PARAMS["modelo"], PARAMS["revision"]):
+            vectores_base, indices_base = vectores, indices
+        else:
+            vectores_base, indices_base = embeddings(comentarios, cache, PARAMS["modelo_coordinacion_base"], PARAMS["revision_coordinacion_base"])
+        anterior = coordinacion(comentarios, normalizados, vectores_base, indices_base)
+        grupos, rafagas, ventana = unir_detecciones([anterior, nueva])
+    else:
+        grupos, rafagas, ventana = nueva
     medir("coordinacion")
     with DecisionEngine(mode=decisor, cache_path=cache / "decisores.sqlite3") as motor:
         validas = validar_candidatas(comentarios.assign(centralidad=candidatas.similitud[indices]),
