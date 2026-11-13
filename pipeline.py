@@ -40,6 +40,8 @@ PARAMS = {
     "factor_vecinos_expansion": 2,
     "peso_origen_fusion": 0.25,
     "q_origen_fusion": 0.1,
+    "q_similitud_aristas": 0.5,
+    "heredar_aristas_similares": False,
     "seed": 42,
     "modelo": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "revision": "a3ded7f4d0d725c6fc251504622d65b2516a3aa1",
@@ -504,7 +506,7 @@ AFIRMACION_CORTA = re.compile(r"^(sí|si|tal cual|exacto|exactamente|así es|asi
 CONTRADICCION = re.compile(r"^(no($|[ ,.!?])|eso es falso\b|mentira\b|nada que ver\b|no es cierto\b|para nada\b)")
 
 
-def postura(comentarios, etiquetas, centralidad, margen, motor):
+def postura(comentarios, etiquetas, centralidad, margen, motor, vectores_postura=None, indices_postura=None):
     from decisores import DecisionInput
 
     textos = comentarios.texto.tolist()
@@ -512,16 +514,23 @@ def postura(comentarios, etiquetas, centralidad, margen, motor):
     posiciones = {identidad: i for i, identidad in enumerate(ids)}
     padres = np.full(len(ids), -1, dtype=np.int64)
     signos = np.ones(len(ids), dtype=np.int8)
-    for i, padre in enumerate(comentarios.respuesta_a):
-        if not padre or padre not in posiciones or posiciones[padre] == i:
-            continue
-        limpio = texto_embedding(textos[i])
-        corto = len(PALABRAS.findall(limpio)) <= PARAMS["min_palabras"] + 1
-        if corto and AFIRMACION_CORTA.match(limpio):
-            padres[i] = posiciones[padre]
-        elif CONTRADICCION.match(limpio):
-            padres[i] = posiciones[padre]
-            signos[i] = -1
+    enlaces = [(i,posiciones[padre]) for i,padre in enumerate(comentarios.respuesta_a) if padre and padre in posiciones and posiciones[padre]!=i]
+    longitudes=np.asarray([len(PALABRAS.findall(texto_embedding(t))) for t in textos])
+    corto=float(np.quantile(longitudes,.25)) if len(longitudes) else 0
+    if enlaces:
+        hijos=np.asarray([i for i,_ in enlaces]);progenitores=np.asarray([p for _,p in enlaces])
+        cosenos=np.einsum("ij,ij->i",vectores_postura[indices_postura[hijos]],vectores_postura[indices_postura[progenitores]])
+        piso=float(np.quantile(cosenos,PARAMS["q_similitud_aristas"]))
+        solicitudes=[DecisionInput(text=textos[i],labels=("acompaña","contradice","independiente"),kind="relation",context={"padre":textos[p]}) for i,p in enlaces]
+        decisiones=motor.decide_local(solicitudes)
+        for (i,p),(relacion,_),coseno in zip(enlaces,decisiones,cosenos):
+            limpio=texto_embedding(textos[i])
+            afin=(etiquetas[i]>=0 and etiquetas[i]==etiquetas[p]) or coseno>=piso or longitudes[i]<=corto
+            if not afin:continue
+            if CONTRADICCION.match(limpio) or relacion=="contradice":
+                padres[i]=p;signos[i]=-1
+            elif AFIRMACION_CORTA.match(limpio) or relacion=="acompaña" or (PARAMS["heredar_aristas_similares"] and coseno>=piso and etiquetas[i]==etiquetas[p] and etiquetas[p]>=0):
+                padres[i]=p
 
     raices = np.flatnonzero((padres < 0) & (etiquetas >= 0))
     ejemplos = {}
@@ -761,7 +770,7 @@ def ejecutar(datos, destino, cache, decisor):
         medir("validar_y_asignar")
         if not comentarios.fecha.notna().any():
             etiquetas[:] = -1
-        posturas, ia, ciclos = postura(comentarios, etiquetas, similitud, margen, motor)
+        posturas, ia, ciclos = postura(comentarios, etiquetas, similitud, margen, motor, vectores, indices)
         estadisticas = motor.stats.as_dict()
         modo = motor.mode
     detalles = comentarios.assign(
