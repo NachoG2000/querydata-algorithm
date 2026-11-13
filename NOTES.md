@@ -227,3 +227,9 @@ Hipótesis A 142: Increase multilingual NLI root rejection recall. Se mide con p
 Resultado 142: {"id": "142", "task": "A", "A": {"completo": 13.65, "dia_1_7": 11.95, "dia_8_14": 17.5, "dia_1_10": 13.2}, "B": {"completo": 19.79, "dia_1_7": 5.63, "dia_8_14": 12.14, "dia_1_10": 9.64}, "precision_B": {"completo": 0.9090909090909091, "dia_1_7": 1.0, "dia_8_14": 1.0, "dia_1_10": 1.0}, "seconds": 77.993, "accepted": false, "reasons": ["A pierde en alguna ventana", "no mejora estricta del completo en la tarea"], "summary": "Increase multilingual NLI root rejection recall"}
 
 Hipótesis A 143: Require stronger NLI evidence for root rejection. Se mide con puntaje oficial en cuatro ventanas y se restaura el código anterior si no pasa.
+Resultado 143: {"id": "143", "task": "A", "A": {"completo": 13.96, "dia_1_7": 12.28, "dia_8_14": 17.85, "dia_1_10": 13.57}, "B": {"completo": 19.79, "dia_1_7": 5.63, "dia_8_14": 12.14, "dia_1_10": 9.64}, "precision_B": {"completo": 0.9090909090909091, "dia_1_7": 1.0, "dia_8_14": 1.0, "dia_1_10": 1.0}, "seconds": 72.26, "accepted": true, "reasons": [], "summary": "Require stronger NLI evidence for root rejection"}
+
+Hipótesis A 144: Use only confident NLI parent relations. Se mide con puntaje oficial en cuatro ventanas y se restaura el código anterior si no pasa.
+Resultado 144: {"id": "144", "task": "A", "A": {"completo": 13.85, "dia_1_7": 12.16, "dia_8_14": 17.75, "dia_1_10": 13.48}, "B": {"completo": 19.79, "dia_1_7": 5.63, "dia_8_14": 12.14, "dia_1_10": 9.64}, "precision_B": {"completo": 0.9090909090909091, "dia_1_7": 1.0, "dia_8_14": 1.0, "dia_1_10": 1.0}, "seconds": 76.856, "accepted": false, "reasons": ["A pierde en alguna ventana", "no mejora estricta del completo en la tarea"], "summary": "Use only confident NLI parent relations"}
+
+Hipótesis A 145: Recover parent relations at lower calibrated NLI confidence. Se mide con puntaje oficial en cuatro ventanas y se restaura el código anterior si no pasa.

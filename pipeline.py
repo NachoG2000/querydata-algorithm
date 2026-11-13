@@ -22,7 +22,7 @@ PARAMS = {
     "nli_revision": "0a71e92a985b6e1ad1828cf67ce9c459639c1dca",
     "nli_longitud": 128,
     "nli_umbral_raiz": 0.45,
-    "nli_umbral_relacion": 0.65,
+    "nli_umbral_relacion": 0.5,
     "q_longitud_guion": 0.25,
     "q_coseno_guion": 0.975,
     "mezcla_ventana": 0.5,
