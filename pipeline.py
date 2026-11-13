@@ -17,6 +17,15 @@ import re
 import unicodedata
 
 PARAMS = {
+    "q_longitud_guion": 0.25,
+    "q_coseno_guion": 0.99,
+    "mezcla_ventana": 0.5,
+    "factor_soporte": 0.85,
+    "factor_rafaga": 2.0,
+    "q_ritmo_publicacion": 0.25,
+    "q_demora_guion": 0.5,
+    "factor_vecindad_sem": 1.0,
+    "q_peso_semantico": 0.5,
     "seed": 42,
     "modelo": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "revision": "a3ded7f4d0d725c6fc251504622d65b2516a3aa1",
@@ -271,79 +280,83 @@ def texto_guion(texto):
 
 
 def coordinacion(comentarios, normalizados, vectores, indices):
-    eventos = comentarios[["publicacion_id", "cuenta_id", "fecha"]].assign(guion=normalizados.map(texto_guion))
+    from sklearn.mixture import GaussianMixture
+    from ejemplos.linea_base import normalize, coordinated_groups
+
+    eventos = comentarios[["comentario_id", "publicacion_id", "cuenta_id", "fecha"]].assign(norm=comentarios.texto.map(normalize))
     eventos = eventos[eventos.fecha.notna() & eventos.cuenta_id.ne("") & eventos.publicacion_id.ne("")]
-    actividad = eventos.sort_values(["publicacion_id", "fecha"])
+    if len(eventos) < 2:
+        return {}, pd.DataFrame(columns=RAFAGAS), 0.0
+    largo = eventos.norm.str.split().str.len()
+    minimo = max(1, int(np.ceil(largo.quantile(PARAMS["q_longitud_guion"]))));largos = eventos[largo.ge(minimo)]
+    if len(largos) < 2:
+        return {}, pd.DataFrame(columns=RAFAGAS), 0.0
+    repetidos = largos.sort_values(["publicacion_id", "norm", "fecha"], kind="stable")
+    intervalos = repetidos.groupby(["publicacion_id", "norm"]).fecha.diff().dt.total_seconds()
+    positivos = intervalos[intervalos.gt(0)].to_numpy()
+    rng = np.random.default_rng(PARAMS["seed"])
+    if len(positivos) >= 2:
+        muestra = np.sort(rng.choice(len(positivos), min(len(positivos), PARAMS["muestra"]), replace=False))
+        mezcla = GaussianMixture(n_components=2, n_init=3, random_state=PARAMS["seed"], reg_covar=1e-6).fit(np.log1p(positivos[muestra]).reshape(-1, 1))
+        medias = np.sort(mezcla.means_.ravel())
+        ventana = float(np.expm1((1 - PARAMS["mezcla_ventana"]) * medias[0] + PARAMS["mezcla_ventana"] * medias[1]))
+    else:
+        ventana = float(np.median(positivos)) if len(positivos) else 0.0
+    if ventana <= 0:
+        return {}, pd.DataFrame(columns=RAFAGAS), 0.0
+    poblacion = eventos.cuenta_id.nunique();volumen = largos.groupby("publicacion_id").size()
+    soporte = max(2, int(np.ceil(PARAMS["factor_soporte"] * np.sqrt(np.log1p(poblacion)))))
+    participantes = max(2, int(np.ceil(np.log1p(volumen.mean()) / PARAMS["factor_rafaga"])))
+    base = eventos.assign(ts=eventos.fecha.dt.as_unit("ns").astype("int64") // 10**9)
+    exactos = coordinated_groups(base, window_s=ventana, min_accounts=participantes, min_tokens=minimo, min_events=2, min_size=soporte)
+    actividad = eventos.sort_values(["publicacion_id", "fecha", "comentario_id"], kind="stable")
     intervalos = actividad.groupby("publicacion_id").fecha.diff().dt.total_seconds()
     ritmo = intervalos[intervalos.gt(0)].groupby(actividad.publicacion_id).median()
-    ventana = float(ritmo.quantile(PARAMS["percentil_ventana"])) if len(ritmo) else 0
-    largos = eventos[eventos.guion.map(lambda texto: len(PALABRAS.findall(texto)) >= PARAMS["min_palabras_guion"])]
-    repetidos = largos.sort_values(["publicacion_id", "guion", "fecha"], kind="stable")
-    ritmo_guion = repetidos.groupby(["publicacion_id", "guion"]).fecha.diff().dt.total_seconds()
-    positivos = ritmo_guion[ritmo_guion.gt(0)]
-    if len(positivos) and ventana > 0:
-        ventana = float(np.sqrt(ventana * positivos.quantile(PARAMS["percentil_intervalo_guion"])))
-    candidatos = largos[largos.duplicated(["publicacion_id", "guion"], keep=False)]
-    aristas = defaultdict(set)
-    eventos_similares = defaultdict(set)
-    rafagas = []
-    for (publicacion, guion), grupo in candidatos.groupby(["publicacion_id", "guion"], sort=True):
-        primer_evento = len(rafagas)
-        inicio = None
-        cuentas = set()
-        for cuenta, fecha in grupo.sort_values("fecha", kind="stable")[["cuenta_id", "fecha"]].itertuples(index=False, name=None):
-            if inicio is None or (fecha - inicio).total_seconds() > ventana:
-                if 2 <= len(cuentas) <= PARAMS["max_cuentas_rafaga"]:
-                    rafagas.append((publicacion, inicio, fin, sorted(cuentas)))
-                inicio, cuentas = fecha, set()
-            cuentas.add(cuenta)
-            fin = fecha
-        if 2 <= len(cuentas) <= PARAMS["max_cuentas_rafaga"]:
-            rafagas.append((publicacion, inicio, fin, sorted(cuentas)))
-        for _, desde, _, miembros in rafagas[primer_evento:]:
-            for par in combinations(miembros, 2):
-                aristas[par].add((publicacion, guion))
-    ordenados = largos.sort_values(["publicacion_id", "fecha"], kind="stable")
-    publicaciones = ordenados.publicacion_id.to_numpy()
-    segundos = ordenados.fecha.dt.as_unit("ns").astype("int64").to_numpy() // 10**9
-    cuentas = ordenados.cuenta_id.to_numpy()
-    posiciones = ordenados.index.to_numpy()
-    if ventana > 0:
-        for salto in range(1, min(len(ordenados), PARAMS["vecinos_temporales"] + 1)):
-            cercanos = np.flatnonzero((publicaciones[:-salto] == publicaciones[salto:]) &
-                                      (segundos[salto:] - segundos[:-salto] <= ventana) &
-                                      (cuentas[:-salto] != cuentas[salto:]))
-            for inicio_lote in range(0, len(cercanos), 4096):
-                izq = cercanos[inicio_lote:inicio_lote + 4096]
-                der = izq + salto
-                similitud = np.einsum("ij,ij->i", vectores[indices[posiciones[izq]]], vectores[indices[posiciones[der]]])
-                for a, b in zip(izq[similitud >= PARAMS["coseno_guion"]], der[similitud >= PARAMS["coseno_guion"]]):
-                    par = tuple(sorted((cuentas[a], cuentas[b])))
-                    publicacion = publicaciones[a]
-                    aristas[par].add((publicacion, normalizados.iloc[posiciones[a]]))
-                    cubo = int(segundos[a]) // max(1, int(ventana))
-                    eventos_similares[publicacion, cubo].update((a, b))
-    # Cada guion independiente por publicación aporta como máximo un voto por par.
-    pesos = {par: len(publicaciones) for par, publicaciones in aristas.items()}
-    pesos = {par: peso for par, peso in pesos.items() if peso >= PARAMS["min_coincidencias"]}
-    grafo = nx.Graph()
+    rapido = float(ritmo.quantile(PARAMS["q_ritmo_publicacion"])) if len(ritmo) else 0.0
+    repetidos_raw = largos.assign(guion=normalizados.loc[largos.index]).sort_values(["publicacion_id", "guion", "fecha"], kind="stable")
+    diferencias = repetidos_raw.groupby(["publicacion_id", "guion"]).fecha.diff().dt.total_seconds()
+    positivos_raw = diferencias[diferencias.gt(0)]
+    ventana_sem = min(ventana, float(np.sqrt(rapido * positivos_raw.quantile(PARAMS["q_demora_guion"])))) if len(positivos_raw) and rapido > 0 else 0.0
+    ordenados = largos.sort_values(["publicacion_id", "fecha", "comentario_id"], kind="stable")
+    posiciones = ordenados.index.to_numpy();pubs = ordenados.publicacion_id.to_numpy();cuentas = ordenados.cuenta_id.to_numpy()
+    tiempos = ordenados.fecha.dt.as_unit("ns").astype("int64").to_numpy() / 1e9
+    cantidad = min(len(vectores), PARAMS["muestra"])
+    a = rng.integers(0, len(vectores), cantidad);b = (a + rng.integers(1, len(vectores), cantidad)) % len(vectores) if len(vectores) > 1 else a
+    fondo = np.einsum("ij,ij->i", vectores[a], vectores[b])
+    q = 1 - (1 - PARAMS["q_coseno_guion"]) / max(1.0, float(np.sqrt(volumen.median())))
+    piso = float(np.quantile(fondo, q));repeticiones = defaultdict(set)
+    vecinos = max(1, int(np.ceil(PARAMS["factor_vecindad_sem"] * np.log1p(len(largos)))))
+    if ventana_sem > 0:
+        for salto in range(1, min(len(ordenados), vecinos + 1)):
+            cercanos = np.flatnonzero((pubs[:-salto] == pubs[salto:]) & (tiempos[salto:] - tiempos[:-salto] <= ventana_sem) & (cuentas[:-salto] != cuentas[salto:]))
+            for inicio in range(0, len(cercanos), 4096):
+                izq=cercanos[inicio:inicio+4096];der=izq+salto
+                similitud=np.einsum("ij,ij->i",vectores[indices[posiciones[izq]]],vectores[indices[posiciones[der]]])
+                for i,j in zip(izq[similitud>=piso],der[similitud>=piso]):
+                    repeticiones[tuple(sorted((cuentas[i],cuentas[j])))].add(pubs[i])
+    pesos = {par:len(contextos) for par,contextos in repeticiones.items() if len(contextos)>=2}
+    sem = nx.Graph()
     if pesos:
-        umbral = np.quantile(list(pesos.values()), PARAMS["percentil_aristas"])
-        grafo.add_weighted_edges_from((a, b, peso) for (a, b), peso in sorted(pesos.items()) if peso >= umbral)
-    comunidades = nx.community.louvain_communities(grafo, seed=PARAMS["seed"]) if grafo.number_of_edges() else []
-    comunidades = [grupo for grupo in comunidades if len(grupo) >= PARAMS["min_cuentas_grupo"]]
-    grupos = {cuenta: f"g{i:03d}" for i, comunidad in enumerate(sorted(map(sorted, comunidades)), 1) for cuenta in comunidad}
-    for (publicacion, _), hits in sorted(eventos_similares.items()):
-        miembros = sorted({cuentas[i] for i in hits if cuentas[i] in grupos})
-        if 2 <= len(miembros) <= PARAMS["max_cuentas_rafaga"]:
-            desde, hasta = pd.to_datetime(segundos[min(hits)], unit="s", utc=True), pd.to_datetime(segundos[max(hits)], unit="s", utc=True)
-            rafagas.append((publicacion, desde, hasta, miembros))
-    filas = []
-    for publicacion, desde, hasta, miembros in rafagas:
-        for grupo, cantidad in sorted(Counter(grupos[c] for c in miembros if c in grupos).items()):
-            if cantidad >= 2:
-                filas.append((grupo, publicacion, desde, hasta, cantidad))
-    return grupos, pd.DataFrame(filas, columns=RAFAGAS).drop_duplicates(), ventana
+        corte=float(np.quantile(list(pesos.values()),PARAMS["q_peso_semantico"]))
+        sem.add_weighted_edges_from((a,b,peso) for (a,b),peso in sorted(pesos.items()) if peso>=corte)
+    comunidades = nx.community.louvain_communities(sem, seed=PARAMS["seed"]) if sem.number_of_edges() else []
+    semanticos = {cuenta:f"s{i:03d}" for i,c in enumerate(sorted(map(sorted,comunidades)),1) if len(c)>=soporte for cuenta in c}
+    union = nx.Graph()
+    for mapping in (exactos,semanticos):
+        grupos = defaultdict(list)
+        for cuenta,grupo in mapping.items():grupos[grupo].append(cuenta)
+        for miembros in grupos.values():
+            miembros=sorted(miembros);union.add_nodes_from(miembros);union.add_edges_from((miembros[0],x) for x in miembros[1:])
+    grupos = {cuenta:f"g{i:03d}" for i,c in enumerate(sorted(map(sorted,nx.connected_components(union))),1) for cuenta in c}
+    seleccionados = eventos[eventos.cuenta_id.isin(grupos)].assign(grupo=lambda t:t.cuenta_id.map(grupos))
+    filas=[]
+    if len(seleccionados):
+        seleccionados=seleccionados.assign(bloque=(seleccionados.fecha.dt.as_unit("ns").astype("int64")/1e9//max(ventana,1)).astype("int64"))
+        for (grupo,pub,_),datos in seleccionados.groupby(["grupo","publicacion_id","bloque"],sort=True):
+            n=datos.cuenta_id.nunique()
+            if n>=2:filas.append((grupo,pub,datos.fecha.min(),datos.fecha.max(),n))
+    print(json.dumps({"coordinacion_escalada":{"ventana_exacta_s":ventana,"ventana_semantica_s":ventana_sem,"piso_coseno":piso,"soporte_comunidad":soporte,"participantes_rafaga":participantes,"min_palabras_relativo":minimo,"cuentas_exactas":len(exactos),"cuentas_semanticas":len(semanticos),"cuentas_union":len(grupos)}},sort_keys=True),flush=True)
+    return grupos,pd.DataFrame(filas,columns=RAFAGAS),ventana
 
 
 def validar_candidatas(comentarios, candidatas, grupos, motor):
