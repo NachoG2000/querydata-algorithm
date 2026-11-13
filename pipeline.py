@@ -38,6 +38,8 @@ PARAMS = {
     "q_coseno_expansion": 0.95,
     "factor_ventana_expansion": 0.25,
     "factor_vecinos_expansion": 2,
+    "peso_origen_fusion": 0.25,
+    "q_origen_fusion": 0.1,
     "seed": 42,
     "modelo": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     "revision": "a3ded7f4d0d725c6fc251504622d65b2516a3aa1",
@@ -236,7 +238,7 @@ def asignar_centroide(vectores, centroides):
     return etiquetas, similitud, margen
 
 
-def agrupar(vectores, aptos):
+def agrupar(vectores, aptos, fechas=None):
     import hdbscan
     from umap import UMAP
 
@@ -262,8 +264,15 @@ def agrupar(vectores, aptos):
         np.fill_diagonal(distancias, np.inf)
         umbral = float(np.quantile(distancias.min(axis=1), PARAMS["percentil_fusion"]))
         if umbral > 0:
+            tiempos = fechas.iloc[indices].astype("int64").to_numpy(dtype=np.float64) / 1e9
+            validos = fechas.iloc[indices].notna().to_numpy()
+            amplitud = np.ptp(tiempos[validos]) if validos.any() else 1.0
+            origenes = np.asarray([np.quantile(tiempos[(etiquetas==i) & validos],PARAMS["q_origen_fusion"]) if ((etiquetas==i) & validos).any() else np.median(tiempos[validos]) if validos.any() else 0.0 for i in etiquetas_validas])
+            distancias = np.clip(1-centros_previos @ centros_previos.T,0,2)
+            distancias += PARAMS["peso_origen_fusion"] * np.abs(origenes[:,None]-origenes[None,:]) / max(amplitud,1.0)
+            np.fill_diagonal(distancias,0)
             fusion = AgglomerativeClustering(n_clusters=None, distance_threshold=umbral,
-                                            metric="cosine", linkage="average").fit_predict(centros_previos)
+                                            metric="precomputed", linkage="average").fit_predict(distancias)
             nuevas = np.full(len(etiquetas), -1, dtype=np.int32)
             for etiqueta, grupo in zip(etiquetas_validas, fusion):
                 nuevas[etiquetas == etiqueta] = grupo
@@ -726,7 +735,8 @@ def ejecutar(datos, destino, cache, decisor):
     normalizados = comentarios.texto.map(texto_embedding)
     unicos = normalizados.groupby(indices).first().reindex(np.arange(len(vectores)))
     aptos = np.asarray([len(PALABRAS.findall(t)) >= PARAMS["min_palabras"] for t in unicos], dtype=bool)
-    candidatas = agrupar(vectores, aptos)
+    fechas_texto = comentarios.groupby(indices).fecha.min().reindex(np.arange(len(vectores)))
+    candidatas = agrupar(vectores, aptos, fechas=fechas_texto)
     medir("agrupar")
     if (PARAMS["modelo_coordinacion_aux"], PARAMS["revision_coordinacion_aux"]) == (PARAMS["modelo"], PARAMS["revision"]):
         vectores_aux, indices_aux = vectores, indices
